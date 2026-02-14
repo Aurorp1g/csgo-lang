@@ -74,6 +74,8 @@ enum class TokenType : uint8_t {
     Async,          // async
     TypeIgnore,     // type: ignore
     TypeComment,    // type: ...
+    RawString,      // 原始字符串
+    Bytes,          // 字节串
     Error,          // 错误
 
     // 字面量关键字
@@ -141,7 +143,8 @@ struct Token {
         std::monostate,         // 无额外数据
         int64_t,                // 整数值
         double,                 // 浮点值
-        std::string             // 字符串值（需拷贝）
+        std::string,            // 字符串值（需拷贝）
+        std::vector<uint8_t>    // 字节值
     > value;
     size_t line;                // 行号（从1开始）
     size_t column;              // 列号（从1开始）
@@ -218,11 +221,14 @@ private:
     // Token 解析方法
     Token makeToken(TokenType type, size_t start, size_t length);
     Token makeToken(TokenType type, size_t start, size_t length, 
-                    std::variant<int64_t, double, std::string> value);
-    
+                    std::variant<int64_t, double, std::string, std::vector<uint8_t>> value);
+
     Token scanIdentifier();
     Token scanNumber();
     Token scanString();
+    Token scanRawString();
+    Token scanBytes();
+    Token scanFString();
     Token scanOperator();
     
     // 处理缩进
@@ -247,6 +253,8 @@ private:
 // 辅助函数
 const char* tokenTypeName(TokenType type);
 std::ostream& operator<<(std::ostream& os, const Token& token);
+static uint8_t hexToDigit(char c);
+static uint8_t octToDigit(char c);
 
 } // namespace csgo
 

@@ -135,17 +135,25 @@ bool Tokenizer::match(char expected) {
 }
 
 void Tokenizer::skipWhitespace() {
-    while (true) {
+    while (!isAtEnd()) {
         char c = peek();
-        switch (c) {
-            case ' ':
-            case '\t':
-            case '\r':
-            case '\f':
+        if (c == ' ' || c == '\t' || c == '\r' || c == '\f') {
+            advance();
+        } else if (c == '\\') {
+            // 行继续符
+            advance();
+            if (peek() == '\n') {
                 advance();
+                line_++;
+                column_ = 1;
+                lineStart_ = pos_;
+            } else {
+                // 不是行继续符，回退
+                pos_--;
                 break;
-            default:
-                return;
+            }
+        } else {
+            break;
         }
     }
 }
@@ -169,7 +177,7 @@ Token Tokenizer::makeToken(TokenType type, size_t start, size_t length) {
 }
 
 Token Tokenizer::makeToken(TokenType type, size_t start, size_t length,
-                           std::variant<int64_t, double, std::string> value) {
+                           std::variant<int64_t, double, std::string, std::vector<uint8_t>> value) {
     Token token{
         type,
         std::string_view(source_.data() + start, length),
@@ -184,6 +192,8 @@ Token Tokenizer::makeToken(TokenType type, size_t start, size_t length,
         token.value = std::get<double>(value);
     } else if (std::holds_alternative<std::string>(value)) {
         token.value = std::get<std::string>(value);
+    } else if (std::holds_alternative<std::vector<uint8_t>>(value)) {
+        token.value = std::get<std::vector<uint8_t>>(value);
     }
     return token;
 }
@@ -286,12 +296,71 @@ Token Tokenizer::nextToken() {
     }
     
     // 字符串
-    if (c == '"' || c == '\'') {
+    if (c == '"' || c == '\'' || c == 'r' || c == 'R' || c == 'b' || c == 'B') {
         return scanString();
     }
     
     // 操作符
     return scanOperator();
+}
+
+Token Tokenizer::scanFString() {
+    size_t start = pos_;
+    advance();  // 跳过 'f'
+    
+    char quote = advance();  // ' 或 "
+    bool triple = false;
+    
+    // 检查三引号
+    if (peek() == quote && peek(1) == quote) {
+        triple = true;
+        advance();
+        advance();
+    }
+    
+    std::string value;
+    while (!isAtEnd()) {
+        char c = advance();
+        
+        if (c == quote) {
+            if (triple) {
+                if (peek() == quote && peek(1) == quote) {
+                    advance();
+                    advance();
+                    break;
+                }
+            } else {
+                break;
+            }
+        }
+        
+        if (c == '{') {
+            // f-string 表达式开始
+            // 这里需要更复杂的处理，可能需要递归调用 tokenizer
+            // 或者使用一个单独的表达式解析器
+            // 简化实现：将整个 f-string 作为普通字符串处理
+            value += c;
+        } else if (c == '\\' && !triple) {
+            // 转义序列
+            if (isAtEnd()) break;
+            char escaped = advance();
+            switch (escaped) {
+                case 'n': value += '\n'; break;
+                case 't': value += '\t'; break;
+                case 'r': value += '\r'; break;
+                case '\\': value += '\\'; break;
+                case '"': value += '"'; break;
+                case '\'': value += '\''; break;
+                case '{': value += '{'; break;
+                case '}': value += '}'; break;
+                default: value += escaped; break;
+            }
+        } else {
+            value += c;
+        }
+    }
+    
+    return makeToken(TokenType::String, start, pos_ - start, std::move(value));
 }
 
 Token Tokenizer::handleIndentation() {
@@ -393,7 +462,18 @@ Token Tokenizer::scanNumber() {
     while (isDigit(peek())) {
         advance();
     }
-    
+
+    // 支持下划线数字分隔符
+    while (isDigit(peek()) || peek() == '_') {
+        if (peek() == '_') {
+            advance();
+            if (!isDigit(peek())) {
+                return error("Invalid numeric literal: underscore must be followed by a digit");
+            }
+        }
+        advance();
+    }
+
     // 小数部分
     if (peek() == '.' && isDigit(peek(1))) {
         isFloat = true;
@@ -425,6 +505,23 @@ Token Tokenizer::scanNumber() {
 
 Token Tokenizer::scanString() {
     size_t start = pos_;
+    bool isRaw = false;
+    bool isBytes = false;
+    
+    // 检查前缀
+    if (peek() == 'r' || peek() == 'R') {
+        isRaw = true;
+        advance();
+    } else if (peek() == 'b' || peek() == 'B') {
+        isBytes = true;
+        advance();
+        // 检查是否是 br"..." 或 rb"..."
+        if (peek() == 'r' || peek() == 'R') {
+            isRaw = true;
+            advance();
+        }
+    }
+    
     char quote = advance();  // ' 或 "
     bool triple = false;
     
@@ -434,42 +531,118 @@ Token Tokenizer::scanString() {
         advance();
         advance();
     }
-    
-    std::string value;
-    while (!isAtEnd()) {
-        char c = advance();
-        
-        if (c == quote) {
-            if (triple) {
-                if (peek() == quote && peek(1) == quote) {
-                    advance();
-                    advance();
-                    break;
-                }
-            } else {
-                break;
-            }
-        }
-        
-        if (c == '\\') {
-            // 转义序列
-            if (isAtEnd()) break;
-            char escaped = advance();
-            switch (escaped) {
-                case 'n': value += '\n'; break;
-                case 't': value += '\t'; break;
-                case 'r': value += '\r'; break;
-                case '\\': value += '\\'; break;
-                case '"': value += '"'; break;
-                case '\'': value += '\''; break;
-                default: value += escaped; break;
-            }
-        } else {
-            value += c;
-        }
+
+    // 检查是否是 f-string
+    if (peek() == 'f' || peek() == 'F') {
+        return scanFString();
     }
     
-    return makeToken(TokenType::String, start, pos_ - start, std::move(value));
+    if (isBytes) {
+        // 字节串处理
+        std::vector<uint8_t> value;
+        while (!isAtEnd()) {
+            char c = advance();
+            
+            if (c == quote) {
+                if (triple) {
+                    if (peek() == quote && peek(1) == quote) {
+                        advance();
+                        advance();
+                        break;
+                    }
+                } else {
+                    break;
+                }
+            }
+            
+            if (c == '\\' && !isRaw) {
+                // 转义序列
+                if (isAtEnd()) break;
+                char escaped = advance();
+                switch (escaped) {
+                    case 'n': value.push_back('\n'); break;
+                    case 't': value.push_back('\t'); break;
+                    case 'r': value.push_back('\r'); break;
+                    case '\\': value.push_back('\\'); break;
+                    case '"': value.push_back('"'); break;
+                    case '\'': value.push_back('\''); break;
+                    case 'x': {
+                        // 十六进制转义
+                        if (isHexDigit(peek()) && isHexDigit(peek(1))) {
+                            uint8_t val = (hexToDigit(peek()) << 4) | hexToDigit(peek(1));
+                            value.push_back(val);
+                            advance(); advance();
+                        } else {
+                            return error("Invalid hex escape sequence");
+                        }
+                        break;
+                    }
+                    default:
+                        if (isOctDigit(escaped)) {
+                            // 八进制转义
+                            uint8_t val = octToDigit(escaped);
+                            if (isOctDigit(peek())) {
+                                val = (val << 3) | octToDigit(peek());
+                                advance();
+                                if (isOctDigit(peek())) {
+                                    val = (val << 3) | octToDigit(peek());
+                                    advance();
+                                }
+                            }
+                            value.push_back(val);
+                        } else {
+                            value.push_back(escaped);
+                        }
+                        break;
+                }
+            } else {
+                value.push_back(static_cast<uint8_t>(c));
+            }
+        }
+        
+        return makeToken(TokenType::Bytes, start, pos_ - start, std::move(value));
+    } else {
+        // 普通字符串或原始字符串处理
+        std::string value;
+        while (!isAtEnd()) {
+            char c = advance();
+            
+            if (c == quote) {
+                if (triple) {
+                    if (peek() == quote && peek(1) == quote) {
+                        advance();
+                        advance();
+                        break;
+                    }
+                } else {
+                    break;
+                }
+            }
+            
+            if (c == '\\' && !isRaw) {
+                // 转义序列
+                if (isAtEnd()) break;
+                char escaped = advance();
+                switch (escaped) {
+                    case 'n': value += '\n'; break;
+                    case 't': value += '\t'; break;
+                    case 'r': value += '\r'; break;
+                    case '\\': value += '\\'; break;
+                    case '"': value += '"'; break;
+                    case '\'': value += '\''; break;
+                    default: value += escaped; break;
+                }
+            } else {
+                value += c;
+            }
+        }
+        
+        if (isRaw) {
+            return makeToken(TokenType::RawString, start, pos_ - start, std::move(value));
+        } else {
+            return makeToken(TokenType::String, start, pos_ - start, std::move(value));
+        }
+    }
 }
 
 Token Tokenizer::scanOperator() {
@@ -668,7 +841,57 @@ const char* tokenTypeName(TokenType type) {
         case TokenType::Async: return "ASYNC";
         case TokenType::TypeIgnore: return "TYPE_IGNORE";
         case TokenType::TypeComment: return "TYPE_COMMENT";
+        case TokenType::RawString: return "RAWSTRING";
+        case TokenType::Bytes: return "BYTES";
         case TokenType::Error: return "ERRORTOKEN";
+        case TokenType::False_: return "FALSE";
+        case TokenType::None_: return "NONE";
+        case TokenType::True_: return "TRUE";
+        case TokenType::And: return "AND";
+        case TokenType::Or: return "OR";
+        case TokenType::Not: return "NOT";
+        case TokenType::As: return "AS";
+        case TokenType::Assert: return "ASSERT";
+        case TokenType::Break: return "BREAK";
+        case TokenType::Class: return "CLASS";
+        case TokenType::Continue: return "CONTINUE";
+        case TokenType::Def: return "DEF";
+        case TokenType::Del: return "DEL";
+        case TokenType::Elif: return "ELIF";
+        case TokenType::Else: return "ELSE";
+        case TokenType::Except: return "EXCEPT";
+        case TokenType::Finally: return "FINALLY";
+        case TokenType::For: return "FOR";
+        case TokenType::From: return "FROM";
+        case TokenType::Global: return "GLOBAL";
+        case TokenType::If: return "IF";
+        case TokenType::Import: return "IMPORT";
+        case TokenType::In: return "IN";
+        case TokenType::Is: return "IS";
+        case TokenType::Lambda: return "LAMBDA";
+        case TokenType::Nonlocal: return "NONLOCAL";
+        case TokenType::Pass: return "PASS";
+        case TokenType::Raise: return "RAISE";
+        case TokenType::Return: return "RETURN";
+        case TokenType::Try: return "TRY";
+        case TokenType::While: return "WHILE";
+        case TokenType::With: return "WITH";
+        case TokenType::Yield: return "YIELD";
+        case TokenType::Match: return "MATCH";
+        case TokenType::Case: return "CASE";
+        case TokenType::Type: return "TYPE";
+        case TokenType::Go: return "GO";
+        case TokenType::Chan: return "CHAN";
+        case TokenType::Select: return "SELECT";
+        case TokenType::Defer: return "DEFER";
+        case TokenType::Const: return "CONST";
+        case TokenType::Let: return "LET";
+        case TokenType::Mut: return "MUT";
+        case TokenType::Struct: return "STRUCT";
+        case TokenType::Impl: return "IMPL";
+        case TokenType::Pub: return "PUB";
+        case TokenType::Use: return "USE";
+        case TokenType::Mod: return "MOD";
         default: return "UNKNOWN";
     }
 }
@@ -676,6 +899,21 @@ const char* tokenTypeName(TokenType type) {
 std::ostream& operator<<(std::ostream& os, const Token& token) {
     os << token.toString();
     return os;
+}
+
+
+// 辅助函数：将十六进制字符转换为数字
+static uint8_t hexToDigit(char c) {
+    if (c >= '0' && c <= '9') return c - '0';
+    if (c >= 'a' && c <= 'f') return 10 + c - 'a';
+    if (c >= 'A' && c <= 'F') return 10 + c - 'A';
+    return 0;
+}
+
+// 辅助函数：将八进制字符转换为数字
+static uint8_t octToDigit(char c) {
+    if (c >= '0' && c <= '7') return c - '0';
+    return 0;
 }
 
 } // namespace csgo
