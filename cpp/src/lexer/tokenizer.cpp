@@ -3,6 +3,7 @@
 #include <cctype>
 #include <unordered_map>
 #include <sstream>
+#include <stack>
 
 namespace csgo {
 
@@ -258,6 +259,62 @@ Token Tokenizer::nextToken() {
         return token;
     }
     
+    // 如果在 f-string 中，继续解析 f-string 的各个部分
+    if (fstringState_) {
+        char c = peek();
+        
+        // 检查 f-string 是否结束
+        bool shouldEnd = false;
+        
+        if (fstringState_->quoteType == FStringState::SINGLE && c == '\'') {
+            shouldEnd = true;
+        } else if (fstringState_->quoteType == FStringState::DOUBLE && c == '"') {
+            shouldEnd = true;
+        } else if (fstringState_->quoteType == FStringState::TRIPLE_SINGLE) {
+            if (c == '\'' && peek(1) == '\'' && peek(2) == '\'') {
+                shouldEnd = true;
+            }
+        } else if (fstringState_->quoteType == FStringState::TRIPLE_DOUBLE) {
+            if (c == '"' && peek(1) == '"' && peek(2) == '"') {
+                shouldEnd = true;
+            }
+        }
+        
+        if (shouldEnd) {
+            // 结束 f-string
+            size_t start = pos_;
+            advance();  // 跳过第一个引号
+            if (fstringState_->quoteType == FStringState::TRIPLE_SINGLE ||
+                fstringState_->quoteType == FStringState::TRIPLE_DOUBLE) {
+                advance(); advance();  // 跳过第二、三个引号
+            }
+            
+            fstringState_.reset();
+            return makeToken(TokenType::FStringEnd, start, pos_ - start);
+        }
+        
+        // 根据当前位置决定解析哪个部分
+        if (c == '{' && !fstringState_->isRaw) {
+            if (peek(1) == '{') {
+                // 转义的 {{，作为文本处理
+                return scanFStringText();
+            } else {
+                // 表达式开始
+                return scanFStringExpression();
+            }
+        } else if (c == '!' && !fstringState_->isRaw) {
+            // 转换标记
+            return scanFStringConversion();
+        } else if (c == ':' && !fstringState_->isRaw) {
+            // 格式说明符
+            return scanFStringFormatSpec();
+        } else {
+            // 文本部分
+            return scanFStringText();
+        }
+    }
+    
+    // 正常的 token 解析逻辑
     skipWhitespace();
     skipComment();
     
@@ -279,13 +336,59 @@ Token Tokenizer::nextToken() {
     char c = peek();
     size_t start = pos_;
     
-    // 换行处理（缩进逻辑）
+    // ========== 修改的字符串检测逻辑 ==========
+    
+    // 1. 直接以引号开头的普通字符串
+    if (c == '"' || c == '\'') {
+        return scanString();
+    }
+    
+    // 2. 检查带前缀的字符串 (r, b, f, 及其组合)
+    bool isPrefixChar = (c == 'r' || c == 'R' || c == 'b' || c == 'B' || c == 'f' || c == 'F');
+    
+    if (isPrefixChar) {
+        char next = peek(1);
+        char next2 = peek(2);
+        
+        // 情况1: 单前缀后跟引号，如 r"hello"
+        if (next == '"' || next == '\'') {
+            return scanString();
+        }
+        
+        // 情况2: 双前缀后跟引号，如 rb"hello" 或 fr"hello"
+        bool isSecondPrefix = (next == 'r' || next == 'R' || 
+                               next == 'b' || next == 'B' || 
+                               next == 'f' || next == 'F');
+        if (isSecondPrefix && (next2 == '"' || next2 == '\'')) {
+            return scanString();
+        }
+        
+        // 情况3: 检查是否是 f-string 的特殊情况
+        if ((c == 'f' || c == 'F') && 
+            (next == 'r' || next == 'R') && 
+            (next2 == '"' || next2 == '\'')) {
+            return scanString();  // fr"..."
+        }
+        
+        if ((c == 'r' || c == 'R') && 
+            (next == 'f' || next == 'F') && 
+            (next2 == '"' || next2 == '\'')) {
+            return scanString();  // rf"..."
+        }
+        
+        // 如果不是字符串前缀，让后面的标识符检查处理
+        // 这里不返回，继续执行
+    }
+    
+    // ========== 结束字符串检测 ==========
+    
+    // 换行处理
     if (c == '\n') {
         advance();
         return handleIndentation();
     }
     
-    // 标识符/关键字
+    // 标识符/关键字（包括单独的 r/b/f 作为标识符）
     if (isIdentifierStart(c)) {
         return scanIdentifier();
     }
@@ -295,73 +398,359 @@ Token Tokenizer::nextToken() {
         return scanNumber();
     }
     
-    // 字符串
-    if (c == '"' || c == '\'' || c == 'r' || c == 'R' || c == 'b' || c == 'B') {
-        return scanString();
-    }
-    
     // 操作符
     return scanOperator();
 }
 
+// 扫描 f-string 的主入口
 Token Tokenizer::scanFString() {
     size_t start = pos_;
-    advance();  // 跳过 'f'
+    size_t startLine = line_;
+    size_t startColumn = column_;
+    bool isRaw = false;
     
-    char quote = advance();  // ' 或 "
-    bool triple = false;
-    
-    // 检查三引号
-    if (peek() == quote && peek(1) == quote) {
-        triple = true;
-        advance();
-        advance();
+    // 检查前缀组合
+    while (true) {
+        char c = peek();
+        if (c == 'f' || c == 'F') {
+            advance();  // 跳过 f
+        } else if ((c == 'r' || c == 'R') && !isRaw) {
+            isRaw = true;
+            advance();  // 跳过 r
+        } else {
+            break;
+        }
     }
     
-    std::string value;
+    // 确定引号类型
+    char quote = advance();
+    FStringState::QuoteType quoteType;
+    bool isTriple = false;
+    
+    if (quote == '\'') {
+        if (peek() == '\'' && peek(1) == '\'') {
+            quoteType = FStringState::TRIPLE_SINGLE;
+            isTriple = true;
+            advance(); advance();  // 跳过两个额外的引号
+        } else {
+            quoteType = FStringState::SINGLE;
+        }
+    } else if (quote == '"') {
+        if (peek() == '"' && peek(1) == '"') {
+            quoteType = FStringState::TRIPLE_DOUBLE;
+            isTriple = true;
+            advance(); advance();  // 跳过两个额外的引号
+        } else {
+            quoteType = FStringState::DOUBLE;
+        }
+    } else {
+        return error("Invalid f-string quote character");
+    }
+    
+    // 保存 f-string 状态
+    fstringState_ = FStringState{
+        quoteType,
+        isRaw,
+        0,
+        start,
+        startLine,
+        startColumn
+    };
+    
+    // 返回 f-string 开始标记
+    return makeToken(TokenType::FString, start, pos_ - start);
+}
+
+// 扫描 f-string 文本部分
+Token Tokenizer::scanFStringText() {
+    if (!fstringState_) {
+        return error("Internal error: No f-string state");
+    }
+    
+    size_t start = pos_;
+    size_t startLine = line_;
+    size_t startColumn = column_;
+    std::string text;
+    
     while (!isAtEnd()) {
-        char c = advance();
+        char c = peek();
         
-        if (c == quote) {
-            if (triple) {
-                if (peek() == quote && peek(1) == quote) {
-                    advance();
-                    advance();
-                    break;
+        // 检查是否结束
+        if (c == '\'' || c == '"') {
+            bool shouldEnd = false;
+            
+            if (fstringState_->quoteType == FStringState::SINGLE && c == '\'') {
+                shouldEnd = true;
+            } else if (fstringState_->quoteType == FStringState::DOUBLE && c == '"') {
+                shouldEnd = true;
+            } else if (fstringState_->quoteType == FStringState::TRIPLE_SINGLE) {
+                if (c == '\'' && peek(1) == '\'' && peek(2) == '\'') {
+                    shouldEnd = true;
                 }
-            } else {
+            } else if (fstringState_->quoteType == FStringState::TRIPLE_DOUBLE) {
+                if (c == '"' && peek(1) == '"' && peek(2) == '"') {
+                    shouldEnd = true;
+                }
+            }
+            
+            if (shouldEnd) {
                 break;
             }
         }
         
-        if (c == '{') {
-            // f-string 表达式开始
-            // 这里需要更复杂的处理，可能需要递归调用 tokenizer
-            // 或者使用一个单独的表达式解析器
-            // 简化实现：将整个 f-string 作为普通字符串处理
-            value += c;
-        } else if (c == '\\' && !triple) {
-            // 转义序列
+        // 检查表达式开始
+        if (c == '{' && !fstringState_->isRaw) {
+            if (peek(1) == '{') {
+                // 转义的 {{，输出单个 {
+                text += '{';
+                advance(); advance();  // 跳过两个 {
+                continue;
+            } else {
+                // 真正的表达式开始
+                break;
+            }
+        }
+        
+        // 检查表达式结束（不应该在文本中遇到）
+        if (c == '}' && !fstringState_->isRaw) {
+            if (peek(1) == '}') {
+                // 转义的 }}，输出单个 }
+                text += '}';
+                advance(); advance();  // 跳过两个 }
+                continue;
+            } else {
+                return error("f-string: single '}' is not allowed outside expression");
+            }
+        }
+        
+        // 处理转义字符
+        if (c == '\\' && !fstringState_->isRaw) {
+            advance();  // 跳过 \
             if (isAtEnd()) break;
+            
             char escaped = advance();
             switch (escaped) {
-                case 'n': value += '\n'; break;
-                case 't': value += '\t'; break;
-                case 'r': value += '\r'; break;
-                case '\\': value += '\\'; break;
-                case '"': value += '"'; break;
-                case '\'': value += '\''; break;
-                case '{': value += '{'; break;
-                case '}': value += '}'; break;
-                default: value += escaped; break;
+                case 'n': text += '\n'; break;
+                case 't': text += '\t'; break;
+                case 'r': text += '\r'; break;
+                case '\\': text += '\\'; break;
+                case '\'': text += '\''; break;
+                case '"': text += '"'; break;
+                case '{': text += '{'; break;
+                case '}': text += '}'; break;
+                default: text += escaped; break;
             }
-        } else {
-            value += c;
+            continue;
+        }
+        
+        // 普通字符
+        text += c;
+        advance();
+    }
+    
+    if (text.empty()) {
+        // 没有文本，继续扫描下一个部分
+        return nextToken();
+    }
+    
+    return makeToken(TokenType::FStringText, start, pos_ - start, text);
+}
+
+// 扫描 f-string 表达式
+Token Tokenizer::scanFStringExpression() {
+    if (!fstringState_) {
+        return error("Internal error: No f-string state");
+    }
+    
+    size_t start = pos_;
+    size_t startLine = line_;
+    size_t startColumn = column_;
+    
+    if (peek() != '{') {
+        return error("Expected '{' at start of f-string expression");
+    }
+    
+    advance();  // 跳过 {
+    fstringState_->nestedBraceLevel = 0;
+    
+    // 解析表达式，直到遇到匹配的 }
+    std::string expr;
+    std::stack<char> brackets;
+    
+    while (!isAtEnd()) {
+        char c = peek();
+        
+        if (c == '{') {
+            if (!fstringState_->isRaw) {
+                // 嵌套的表达式开始
+                brackets.push('{');
+                fstringState_->nestedBraceLevel++;
+            }
+            expr += c;
+            advance();
+        }
+        else if (c == '}') {
+            if (fstringState_->nestedBraceLevel > 0) {
+                // 结束嵌套的表达式
+                if (!brackets.empty() && brackets.top() == '{') {
+                    brackets.pop();
+                    fstringState_->nestedBraceLevel--;
+                }
+                expr += c;
+                advance();
+            } else {
+                // 表达式真正的结束
+                advance();  // 跳过 }
+                break;
+            }
+        }
+        else if (c == '(' || c == '[') {
+            brackets.push(c);
+            expr += c;
+            advance();
+        }
+        else if (c == ')' || c == ']') {
+            if (!brackets.empty()) {
+                char expected = (c == ')') ? '(' : '[';
+                if (brackets.top() == expected) {
+                    brackets.pop();
+                }
+            }
+            expr += c;
+            advance();
+        }
+        else if (c == '\'' || c == '"') {
+            // 表达式中的字符串字面量
+            expr += c;
+            advance();
+            char quote = c;
+            
+            // 简单处理字符串（完整实现应该调用 scanString）
+            while (!isAtEnd() && peek() != quote) {
+                if (peek() == '\\') {
+                    expr += '\\';
+                    advance();
+                }
+                expr += peek();
+                advance();
+            }
+            
+            if (!isAtEnd()) {
+                expr += quote;
+                advance();
+            }
+        }
+        else {
+            expr += c;
+            advance();
         }
     }
     
-    return makeToken(TokenType::String, start, pos_ - start, std::move(value));
+    if (expr.empty()) {
+        return error("Empty expression in f-string");
+    }
+    
+    // 创建表达式 token
+    Token exprToken = makeToken(TokenType::FStringExpr, start, pos_ - start, expr);
+    
+    // 检查后面是否有转换标记或格式说明符
+    char next = peek();
+    if (next == '!') {
+        // 有转换标记，让 scanFStringConversion 处理
+        return exprToken;
+    } else if (next == ':') {
+        // 有格式说明符，让 scanFStringFormatSpec 处理
+        return exprToken;
+    }
+    
+    // 没有转换和格式，表达式结束
+    return exprToken;
 }
+
+// 扫描转换标记 (!r, !s, !a)
+Token Tokenizer::scanFStringConversion() {
+    if (!fstringState_) {
+        return error("Internal error: No f-string state");
+    }
+    
+    size_t start = pos_;
+    
+    if (peek() != '!') {
+        return error("Expected '!' for f-string conversion");
+    }
+    
+    advance();  // 跳过 !
+    
+    if (isAtEnd()) {
+        return error("Unexpected end of f-string conversion");
+    }
+    
+    char conv = advance();
+    std::string convStr;
+    
+    switch (conv) {
+        case 'r':
+            convStr = "!r";
+            break;
+        case 's':
+            convStr = "!s";
+            break;
+        case 'a':
+            convStr = "!a";
+            break;
+        default:
+            return error("Invalid conversion character in f-string: expected 'r', 's', or 'a'");
+    }
+    
+    Token convToken = makeToken(TokenType::FStringConv, start, pos_ - start, convStr);
+    
+    // 检查后面是否有格式说明符
+    if (peek() == ':') {
+        return convToken;  // 让 scanFStringFormatSpec 处理
+    }
+    
+    // 没有格式说明符，转换标记结束
+    return convToken;
+}
+
+// 扫描格式说明符
+Token Tokenizer::scanFStringFormatSpec() {
+    if (!fstringState_) {
+        return error("Internal error: No f-string state");
+    }
+    
+    size_t start = pos_;
+    
+    if (peek() != ':') {
+        return error("Expected ':' for f-string format specifier");
+    }
+    
+    advance();  // 跳过 :
+    
+    std::string spec;
+    bool inBraces = false;
+    
+    while (!isAtEnd()) {
+        char c = peek();
+        
+        if (c == '{' && !fstringState_->isRaw) {
+            // 格式说明符中不支持嵌套表达式
+            return error("f-string: nested expressions inside format specifier are not allowed");
+        }
+        
+        if (c == '}') {
+            // 格式说明符结束，先跳过 }
+            advance();
+            break;
+        }
+        
+        spec += c;
+        advance();
+    }
+    
+    return makeToken(TokenType::FStringSpec, start, pos_ - start, spec);
+}
+
 
 Token Tokenizer::handleIndentation() {
     // 计算缩进级别
@@ -440,45 +829,37 @@ Token Tokenizer::scanNumber() {
             if (!isHexDigit(peek())) {
                 return error("Invalid hexadecimal literal");
             }
-            while (isHexDigit(peek())) {
+            while (isHexDigit(peek()) || peek() == '_') {
                 advance();
             }
-            // 解析值
-            std::string hexStr(source_, start + 2, pos_ - start - 2);
+            // 解析值（需要移除下划线）
+            std::string hexStr;
+            for (size_t i = start + 2; i < pos_; ++i) {
+                if (source_[i] != '_') hexStr += source_[i];
+            }
             int64_t value = std::stoll(hexStr, nullptr, 16);
             return makeToken(TokenType::Number, start, pos_ - start, value);
         } else if (next == 'o' || next == 'O') {
             // 八进制
             advance();
-            while (isOctDigit(peek())) advance();
+            while (isOctDigit(peek()) || peek() == '_') advance();
         } else if (next == 'b' || next == 'B') {
             // 二进制
             advance();
-            while (isBinDigit(peek())) advance();
+            while (isBinDigit(peek()) || peek() == '_') advance();
         }
     }
     
     // 十进制
-    while (isDigit(peek())) {
-        advance();
-    }
-
-    // 支持下划线数字分隔符
     while (isDigit(peek()) || peek() == '_') {
-        if (peek() == '_') {
-            advance();
-            if (!isDigit(peek())) {
-                return error("Invalid numeric literal: underscore must be followed by a digit");
-            }
-        }
         advance();
     }
-
+    
     // 小数部分
     if (peek() == '.' && isDigit(peek(1))) {
         isFloat = true;
         advance();  // 跳过 '.'
-        while (isDigit(peek())) advance();
+        while (isDigit(peek()) || peek() == '_') advance();
     }
     
     // 指数部分
@@ -489,11 +870,15 @@ Token Tokenizer::scanNumber() {
         if (!isDigit(peek())) {
             return error("Invalid exponent");
         }
-        while (isDigit(peek())) advance();
+        while (isDigit(peek()) || peek() == '_') advance();
     }
     
-    // 解析值
-    std::string numStr(source_, start, pos_ - start);
+    // 解析值（需要移除下划线）
+    std::string numStr;
+    for (size_t i = start; i < pos_; ++i) {
+        if (source_[i] != '_') numStr += source_[i];
+    }
+    
     if (isFloat) {
         double value = std::stod(numStr);
         return makeToken(TokenType::Number, start, pos_ - start, value);
@@ -505,21 +890,21 @@ Token Tokenizer::scanNumber() {
 
 Token Tokenizer::scanString() {
     size_t start = pos_;
-    bool isRaw = false;
-    bool isBytes = false;
     
     // 检查前缀
-    if (peek() == 'r' || peek() == 'R') {
-        isRaw = true;
-        advance();
-    } else if (peek() == 'b' || peek() == 'B') {
-        isBytes = true;
-        advance();
-        // 检查是否是 br"..." 或 rb"..."
-        if (peek() == 'r' || peek() == 'R') {
-            isRaw = true;
-            advance();
-        }
+    bool isFString = false;
+    bool isRawString = false;
+    bool isBytesString = false;
+    
+    // 处理前缀 (f, r, b, fr, rf, fb, bf, 等)
+    while (peek() == 'f' || peek() == 'F' || peek() == 'r' || peek() == 'R' || peek() == 'b' || peek() == 'B') {
+        char prefix = advance();
+        if (prefix == 'f' || prefix == 'F') isFString = true;
+        else if (prefix == 'r' || prefix == 'R') isRawString = true;
+        else if (prefix == 'b' || prefix == 'B') isBytesString = true;
+        
+        // 检查是否是引号，如果不是则继续检查前缀
+        if (peek() == '"' || peek() == '\'') break;
     }
     
     char quote = advance();  // ' 或 "
@@ -531,118 +916,265 @@ Token Tokenizer::scanString() {
         advance();
         advance();
     }
-
-    // 检查是否是 f-string
-    if (peek() == 'f' || peek() == 'F') {
-        return scanFString();
+    
+    std::string value;
+    while (!isAtEnd()) {
+        char c = advance();
+        
+        if (c == quote) {
+            if (triple) {
+                if (peek() == quote && peek(1) == quote) {
+                    advance();
+                    advance();
+                    break;
+                }
+            } else {
+                break;
+            }
+        }
+        
+        if (c == '\\' && !isRawString) {
+            // 转义序列（非原始字符串）
+            if (isAtEnd()) break;
+            char escaped = advance();
+            switch (escaped) {
+                case 'n': value += '\n'; break;
+                case 't': value += '\t'; break;
+                case 'r': value += '\r'; break;
+                case '\\': value += '\\'; break;
+                case '"': value += '"'; break;
+                case '\'': value += '\''; break;
+                case 'x':
+                case 'X': {
+                    if (isHexDigit(peek()) && isHexDigit(peek(1))) {
+                        char h1 = advance();
+                        char h2 = advance();
+                        uint8_t high = hexToDigit(h1);
+                        uint8_t low = hexToDigit(h2);
+                        value += static_cast<char>((high << 4) | low);
+                    } else {
+                        value += escaped;  // 保留未识别的转义
+                    }
+                    break;
+                }
+                default: value += escaped; break;
+            }
+        } else {
+            value += c;
+        }
     }
     
-    if (isBytes) {
-        // 字节串处理
-        std::vector<uint8_t> value;
-        while (!isAtEnd()) {
-            char c = advance();
-            
-            if (c == quote) {
-                if (triple) {
-                    if (peek() == quote && peek(1) == quote) {
-                        advance();
-                        advance();
-                        break;
-                    }
-                } else {
-                    break;
-                }
-            }
-            
-            if (c == '\\' && !isRaw) {
-                // 转义序列
-                if (isAtEnd()) break;
-                char escaped = advance();
-                switch (escaped) {
-                    case 'n': value.push_back('\n'); break;
-                    case 't': value.push_back('\t'); break;
-                    case 'r': value.push_back('\r'); break;
-                    case '\\': value.push_back('\\'); break;
-                    case '"': value.push_back('"'); break;
-                    case '\'': value.push_back('\''); break;
-                    case 'x': {
-                        // 十六进制转义
-                        if (isHexDigit(peek()) && isHexDigit(peek(1))) {
-                            uint8_t val = (hexToDigit(peek()) << 4) | hexToDigit(peek(1));
-                            value.push_back(val);
-                            advance(); advance();
-                        } else {
-                            return error("Invalid hex escape sequence");
-                        }
-                        break;
-                    }
-                    default:
-                        if (isOctDigit(escaped)) {
-                            // 八进制转义
-                            uint8_t val = octToDigit(escaped);
-                            if (isOctDigit(peek())) {
-                                val = (val << 3) | octToDigit(peek());
-                                advance();
-                                if (isOctDigit(peek())) {
-                                    val = (val << 3) | octToDigit(peek());
-                                    advance();
-                                }
-                            }
-                            value.push_back(val);
-                        } else {
-                            value.push_back(escaped);
-                        }
-                        break;
-                }
-            } else {
-                value.push_back(static_cast<uint8_t>(c));
-            }
+    // 确定token类型
+    TokenType tokenType = TokenType::String;
+    if (isFString) tokenType = TokenType::FString;
+    else if (isRawString) tokenType = TokenType::RawString;
+    else if (isBytesString) tokenType = TokenType::Bytes;
+    
+    // 如果是字节串，将 string 转换为 vector<uint8_t>
+    if (tokenType == TokenType::Bytes) {
+        std::vector<uint8_t> bytesValue;
+        bytesValue.reserve(value.size());
+        for (char c : value) {
+            bytesValue.push_back(static_cast<uint8_t>(c));
         }
+        return makeToken(tokenType, start, pos_ - start, std::move(bytesValue));
+    }
+    
+    return makeToken(tokenType, start, pos_ - start, std::move(value));
+}
+
+// 扫描原始字符串 (r"..." 或 R"...")
+Token Tokenizer::scanRawString() {
+    size_t start = pos_;
+    size_t startLine = line_;
+    size_t startColumn = column_;
+    bool isRaw = false;
+    
+    // 检查前缀
+    if (peek() == 'r' || peek() == 'R') {
+        isRaw = true;
+        advance();  // 跳过 r/R
+    }
+    
+    // 确保后面是引号
+    char quote = peek();
+    if (quote != '\'' && quote != '"') {
+        // 不是原始字符串，回退并作为标识符处理
+        pos_ = start;
+        return scanIdentifier();
+    }
+    
+    advance();  // 跳过引号
+    bool triple = false;
+    
+    // 检查三引号
+    if (peek() == quote && peek(1) == quote) {
+        triple = true;
+        advance();  // 跳过第二个引号
+        advance();  // 跳过第三个引号
+    }
+    
+    std::string value;
+    
+    while (!isAtEnd()) {
+        char c = peek();
         
-        return makeToken(TokenType::Bytes, start, pos_ - start, std::move(value));
-    } else {
-        // 普通字符串或原始字符串处理
-        std::string value;
-        while (!isAtEnd()) {
-            char c = advance();
-            
-            if (c == quote) {
-                if (triple) {
-                    if (peek() == quote && peek(1) == quote) {
-                        advance();
-                        advance();
-                        break;
-                    }
-                } else {
+        // 检查是否结束
+        if (c == quote) {
+            if (triple) {
+                if (peek(1) == quote && peek(2) == quote) {
+                    advance();  // 跳过当前引号
+                    advance();  // 跳过第二个引号
+                    advance();  // 跳过第三个引号
                     break;
                 }
-            }
-            
-            if (c == '\\' && !isRaw) {
-                // 转义序列
-                if (isAtEnd()) break;
-                char escaped = advance();
-                switch (escaped) {
-                    case 'n': value += '\n'; break;
-                    case 't': value += '\t'; break;
-                    case 'r': value += '\r'; break;
-                    case '\\': value += '\\'; break;
-                    case '"': value += '"'; break;
-                    case '\'': value += '\''; break;
-                    default: value += escaped; break;
-                }
-            } else {
+                // 在三引号中，单个引号是内容
                 value += c;
+                advance();
+            } else {
+                advance();  // 跳过结束引号
+                break;
             }
         }
+        else {
+            // 原始字符串中，所有字符都原样保留，包括反斜杠
+            value += c;
+            advance();
+        }
         
-        if (isRaw) {
-            return makeToken(TokenType::RawString, start, pos_ - start, std::move(value));
-        } else {
-            return makeToken(TokenType::String, start, pos_ - start, std::move(value));
+        // 处理换行（单引号原始字符串不允许换行）
+        if (c == '\n' && !triple) {
+            pos_ = start;  // 回退到开始位置
+            return error("Unterminated raw string literal");
         }
     }
+    
+    if (isAtEnd()) {
+        pos_ = start;  // 回退到开始位置
+        return error("Unterminated raw string literal");
+    }
+    
+    // 检查是否成功读取了结束引号
+    // 对于非三引号的字符串，最后一个字符应该是引号
+    if (!triple && pos_ > start && source_[pos_ - 1] != quote) {
+        pos_ = start;  // 回退到开始位置
+        return error("Unterminated raw string literal");
+    }
+    
+    return makeToken(TokenType::RawString, start, pos_ - start, std::move(value));
+}
+
+// 扫描字节串 (b"..." 或 B"...")
+Token Tokenizer::scanBytes() {
+    size_t start = pos_;
+    size_t startLine = line_;
+    size_t startColumn = column_;
+    bool isRaw = false;
+    
+    // 检查前缀
+    if (peek() == 'b' || peek() == 'B') {
+        advance();  // 跳过 b/B
+    }
+    
+    // 检查是否有原始前缀 (br 或 rb)
+    if (peek() == 'r' || peek() == 'R') {
+        isRaw = true;
+        advance();  // 跳过 r/R
+    }
+    
+    // 确保后面是引号
+    char quote = peek();
+    if (quote != '\'' && quote != '"') {
+        pos_ = start;
+        return scanIdentifier();
+    }
+    
+    advance();  // 跳过引号
+    bool triple = false;
+    
+    // 检查三引号
+    if (peek() == quote && peek(1) == quote) {
+        triple = true;
+        advance();  // 跳过第二个引号
+        advance();  // 跳过第三个引号
+    }
+    
+    std::vector<uint8_t> value;  // 明确使用 vector<uint8_t>
+    
+    while (!isAtEnd()) {
+        char c = peek();
+        
+        // 检查是否结束
+        if (c == quote) {
+            if (triple) {
+                if (peek(1) == quote && peek(2) == quote) {
+                    advance();
+                    advance();
+                    advance();
+                    break;
+                }
+                value.push_back(static_cast<uint8_t>(c));
+                advance();
+            } else {
+                advance();
+                break;
+            }
+        }
+        // 处理转义序列
+        else if (c == '\\' && !isRaw) {
+            advance();  // 跳过 \
+            if (isAtEnd()) break;
+            
+            char escaped = advance();
+            
+            switch (escaped) {
+                case 'n': value.push_back('\n'); break;
+                case 't': value.push_back('\t'); break;
+                case 'r': value.push_back('\r'); break;
+                case 'b': value.push_back('\b'); break;
+                case 'f': value.push_back('\f'); break;
+                case '\\': value.push_back('\\'); break;
+                case '\'': value.push_back('\''); break;
+                case '"': value.push_back('"'); break;
+                
+                case 'x':
+                case 'X': {
+                    if (isHexDigit(peek()) && isHexDigit(peek(1))) {
+                        char h1 = advance();
+                        char h2 = advance();
+                        
+                        uint8_t high = hexToDigit(h1);
+                        uint8_t low = hexToDigit(h2);
+                        uint8_t val = (high << 4) | low;
+                        
+                        value.push_back(val);
+                    } else {
+                        pos_ = start;
+                        return error("Invalid \\x escape sequence in bytes literal");
+                    }
+                    break;
+                }
+                
+                default:
+                    // 对于未知转义，保留反斜杠和字符
+                    value.push_back('\\');
+                    value.push_back(static_cast<uint8_t>(escaped));
+                    break;
+            }
+        }
+        else {
+            value.push_back(static_cast<uint8_t>(c));
+            advance();
+        }
+    }
+    
+    if (isAtEnd()) {
+        pos_ = start;
+        return error("Unterminated bytes literal");
+    }
+    
+    // 确保返回 vector<uint8_t>
+    return makeToken(TokenType::Bytes, start, pos_ - start, value);
 }
 
 Token Tokenizer::scanOperator() {
@@ -787,6 +1319,12 @@ const char* tokenTypeName(TokenType type) {
         case TokenType::Name: return "NAME";
         case TokenType::Number: return "NUMBER";
         case TokenType::String: return "STRING";
+        case TokenType::FString: return "FSTRING";
+        case TokenType::FStringText: return "FSTRING_TEXT";
+        case TokenType::FStringExpr: return "FSTRING_EXPR";
+        case TokenType::FStringConv: return "FSTRING_CONV";
+        case TokenType::FStringSpec: return "FSTRING_SPEC";
+        case TokenType::FStringEnd: return "FSTRING_END";
         case TokenType::NewLine: return "NEWLINE";
         case TokenType::Indent: return "INDENT";
         case TokenType::Dedent: return "DEDENT";

@@ -74,8 +74,17 @@ enum class TokenType : uint8_t {
     Async,          // async
     TypeIgnore,     // type: ignore
     TypeComment,    // type: ...
+
+    // 字符串类型
     RawString,      // 原始字符串
     Bytes,          // 字节串
+    FString,        // f-string 开始标记
+    FStringText,    // f-string 中的文本部分
+    FStringExpr,    // f-string 表达式开始
+    FStringConv,    // 转换标记 !r !s !a
+    FStringSpec,    // 格式说明符
+    FStringEnd,     // f-string 结束标记
+
     Error,          // 错误
 
     // 字面量关键字
@@ -228,7 +237,26 @@ private:
     Token scanString();
     Token scanRawString();
     Token scanBytes();
-    Token scanFString();
+
+    // f-string 相关方法
+    Token scanFString();                    // 主入口
+    Token scanFStringText();                 // 扫描文本部分
+    Token scanFStringExpression();            // 扫描表达式
+    Token scanFStringConversion();            // 扫描转换标记
+    Token scanFStringFormatSpec();            // 扫描格式说明符
+    
+    // f-string 状态
+    struct FStringState {
+        enum QuoteType { SINGLE, DOUBLE, TRIPLE_SINGLE, TRIPLE_DOUBLE };
+        QuoteType quoteType;
+        bool isRaw;
+        int nestedBraceLevel;
+        size_t startPos;
+        size_t startLine;
+        size_t startColumn;
+    };
+    
+    std::optional<FStringState> fstringState_;  // 当前 f-string 状态
     Token scanOperator();
     
     // 处理缩进
