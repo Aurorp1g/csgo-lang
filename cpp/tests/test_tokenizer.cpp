@@ -1,4 +1,4 @@
-// cpp/tests/lexer/test_tokenizer.cpp
+// cpp/tests/test_tokenizer.cpp
 #include "lexer/tokenizer.h"
 #include <iostream>
 #include <cassert>
@@ -384,16 +384,10 @@ void testBytesString() {
     std::cout << "Test: Bytes string with b prefix... ";
     Tokenizer tokenizer(R"(b"hello\x20world")");
     auto tokens = tokenizer.tokenize();
-    
-    std::cout << "\nToken count: " << tokens.size() << std::endl;
-    
+
     // 首先检查 token 类型
     if (tokens[0].type == TokenType::Bytes) {
-        std::cout << "Token type is Bytes" << std::endl;
         checkToken(tokens[0], TokenType::Bytes, R"(b"hello\x20world")");
-        
-        // 检查值的类型
-        std::cout << "Value type index: " << tokens[0].value.index() << std::endl;
         
         // 使用 visit 来安全地访问 variant
         bool test_passed = false;
@@ -401,8 +395,6 @@ void testBytesString() {
             using T = std::decay_t<decltype(arg)>;
             if constexpr (std::is_same_v<T, std::vector<uint8_t>>) {
                 std::string result(arg.begin(), arg.end());
-                std::cout << "Bytes value: '" << result << "'" << std::endl;
-                std::cout << "Bytes size: " << arg.size() << std::endl;
                 assert(result == "hello\x20world");
                 assert(arg.size() == 11);
                 test_passed = true;
