@@ -147,7 +147,9 @@ enum class TokenType : uint8_t {
     If,             ///< if 条件
     Import,         ///< import 导入模块
     In,             ///< in 成员测试
+    NotIn,          ///< not in 成员测试
     Is,             ///< is 身份测试
+    IsNot,          ///< is not 身份测试
     Lambda,         ///< lambda 匿名函数
     Nonlocal,       ///< nonlocal 非局部变量
     Pass,           ///< pass 空语句
@@ -188,7 +190,7 @@ enum class TokenType : uint8_t {
  */
 struct Token {
     TokenType type;                           ///< Token 的类型
-    std::string_view text;                    ///< 指向源字符串的视图（零拷贝）
+    std::string text;                    ///< 指向源字符串的视图（零拷贝）
     
     /**
      * @brief Token 的解析值
@@ -338,6 +340,10 @@ private:
     // ===== 缩进状态管理 =====
     std::vector<size_t> indentStack_{0};   ///< 缩进栈，记录各级缩进
     std::vector<Token> pendingIndents_;    ///< 待处理的缩进/dedent Token
+
+    
+    bool justAfterNewline_ = false;  // 标记刚处理过换行
+    size_t lastIndent_ = 0;          // 上次计算的缩进
 
     // ===== 括号嵌套追踪 =====
     std::vector<char> parenStack_;         ///< 括号类型栈
@@ -498,6 +504,12 @@ private:
      * @return 对应的 Token
      */
     Token scanOperator();
+
+    /**
+     * @brief 处理换行后的缩进逻辑
+     * @return NewLine、Indent 或 Dedent 类型的 Token
+     */
+    Token handleNewline();
 
     // ===== 缩进处理 =====
     /**

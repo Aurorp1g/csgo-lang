@@ -19,7 +19,7 @@
  * - 完善的错误报告机制
  */
 
-#include "tokenizer.h"
+#include "lexer/tokenizer.h"
 #include <cctype>
 #include <unordered_map>
 #include <sstream>
@@ -60,7 +60,9 @@ static const std::unordered_map<std::string_view, TokenType> keywords = {
     {"if", TokenType::If},
     {"import", TokenType::Import},
     {"in", TokenType::In},
+    {"not in", TokenType::NotIn},
     {"is", TokenType::Is},
+    {"is not", TokenType::IsNot},
     {"lambda", TokenType::Lambda},
     {"nonlocal", TokenType::Nonlocal},
     {"not", TokenType::Not},
@@ -289,7 +291,7 @@ void Tokenizer::skipComment() {
 Token Tokenizer::makeToken(TokenType type, size_t start, size_t length) {
     return Token{
         type,
-        std::string_view(source_.data() + start, length),
+        std::string(source_.data() + start, length),
         std::monostate{},
         line_,
         column_ - length
@@ -312,7 +314,7 @@ Token Tokenizer::makeToken(TokenType type, size_t start, size_t length,
                            std::variant<int64_t, double, std::string, std::vector<uint8_t>> value) {
     Token token{
         type,
-        std::string_view(source_.data() + start, length),
+        std::string(source_.data() + start, length),
         std::monostate{},
         line_,
         column_ - length
@@ -590,7 +592,7 @@ Token Tokenizer::nextToken() {
     // 6. 换行处理
     if (c == '\n') {
         advance();
-        return handleIndentation();
+        return handleNewline();
     }
     
     // 7. 标识符/关键字
@@ -625,10 +627,10 @@ Token Tokenizer::scanIdentifier() {
         advance();
     }
     
-    std::string_view text(source_.data() + start, pos_ - start);
+    std::string text(source_.data() + start, pos_ - start);
     TokenType type = checkKeyword(text);
     
-    return makeToken(type, start, pos_ - start, std::string(text));
+    return makeToken(type, start, pos_ - start, text);
 }
 
 // ============================================================================
@@ -1760,7 +1762,9 @@ const char* tokenTypeName(TokenType type) {
         case TokenType::If: return "IF";
         case TokenType::Import: return "IMPORT";
         case TokenType::In: return "IN";
+        case TokenType::NotIn: return "NOTIN";
         case TokenType::Is: return "IS";
+        case TokenType::IsNot: return "ISNOT";
         case TokenType::Lambda: return "LAMBDA";
         case TokenType::Nonlocal: return "NONLOCAL";
         case TokenType::Pass: return "PASS";
@@ -1787,6 +1791,61 @@ const char* tokenTypeName(TokenType type) {
         case TokenType::Mod: return "MOD";
         default: return "UNKNOWN";
     }
+}
+
+/**
+ * @brief 处理换行后的缩进逻辑
+ * @details 计算新行的缩进级别，生成 NewLine、Indent 或 Dedent token
+ * @return NewLine、Indent 或 Dedent 类型的 Token
+ */
+Token Tokenizer::handleNewline() {
+    // 计算新行的缩进
+    size_t col = 0;
+    while (true) {
+        char c = peek();
+        if (c == ' ') {
+            col++;
+            advance();
+        } else if (c == '\t') {
+            col = (col / tabSize_ + 1) * tabSize_;
+            advance();
+        } else if (c == '\f') {
+            col = 0;
+            advance();
+        } else {
+            break;
+        }
+    }
+    
+    // 跳过空行（另一个换行）和注释行
+    if (peek() == '\n' || peek() == '#') {
+        return nextToken();
+    }
+    
+    // 关键修复：文件结束也要生成 NewLine
+    // 先计算缩进变化，生成 pending tokens，然后返回 NewLine
+    
+    size_t currentIndent = indentStack_.back();
+    
+    if (col > currentIndent) {
+        // 缩进增加：先返回 NewLine，下次返回 Indent
+        indentStack_.push_back(col);
+        pendingIndents_.push_back(makeToken(TokenType::Indent, pos_ - col, col));
+        return makeToken(TokenType::NewLine, pos_ - col, 0);
+    } else if (col < currentIndent) {
+        // 缩进减少：先返回 NewLine，然后 pendingIndents 返回 Dedent(s)
+        while (col < indentStack_.back()) {
+            indentStack_.pop_back();
+            pendingIndents_.push_back(makeToken(TokenType::Dedent, pos_, 0));
+        }
+        if (col != indentStack_.back()) {
+            return error("Inconsistent dedent");
+        }
+        return makeToken(TokenType::NewLine, pos_ - col, 0);
+    }
+    
+    // 缩进相同：返回 NewLine
+    return makeToken(TokenType::NewLine, pos_ - col, 0);
 }
 
 /**
