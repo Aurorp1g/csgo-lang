@@ -862,6 +862,10 @@ std::unique_ptr<Stmt> Parser::parseExpressionStatement() {
         auto value = parseTestList();
         
         auto assign = std::make_unique<Assign>();
+        
+        // 将目标节点的 ctx 设置为 Store
+        setTargetContext(*firstExpr);
+        
         assign->targets.push_back(std::move(firstExpr));
         if (!value.empty()) {
             assign->value = std::move(value[0]);
@@ -912,6 +916,17 @@ std::unique_ptr<Stmt> Parser::parseExpressionStatement() {
     exprStmt->value = std::move(firstExpr);
     exprStmt->position = startPos;
     return exprStmt;
+}
+
+// ============================================================================
+// 辅助函数
+// ============================================================================
+
+void Parser::setTargetContext(Expr& expr) {
+    if (expr.type == ASTNodeType::Name) {
+        auto& name = static_cast<Name&>(expr);
+        name.ctx = Name::Store;
+    }
 }
 
 std::vector<std::unique_ptr<Expr>> Parser::parseTestList() {
@@ -1649,8 +1664,8 @@ std::unique_ptr<Expr> Parser::parseGeneratorExpression() {
     return gen;
 }
  
-std::vector<std::unique_ptr<Expr>> Parser::parseComprehension() {
-    std::vector<std::unique_ptr<Expr>> generators;
+std::vector<std::unique_ptr<comprehension>> Parser::parseComprehension() {
+    std::vector<std::unique_ptr<comprehension>> generators;
     
     while (check(TokenType::For)) {
         auto comp = std::make_unique<comprehension>();

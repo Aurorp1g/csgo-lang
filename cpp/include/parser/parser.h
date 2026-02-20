@@ -466,6 +466,17 @@ private:
     std::unique_ptr<Stmt> parseExpressionStatement();
     
     // =========================================================================
+    // 辅助函数
+    // =========================================================================
+    
+    /**
+     * @brief 设置目标表达式的上下文为 Store
+     * @details 用于赋值语句的目标节点
+     * @param expr 要设置上下文的表达式
+     */
+    void setTargetContext(Expr& expr);
+    
+    // =========================================================================
     // 表达式解析（优先级从低到高）
     // =========================================================================
     
@@ -636,7 +647,7 @@ private:
      * @brief 解析推导式
      * @return 解析后的推导式 AST 向量
      */
-    std::vector<std::unique_ptr<Expr>> parseComprehension();
+    std::vector<std::unique_ptr<comprehension>> parseComprehension();
 
     /**
      * @brief 解析推导式迭代对象
