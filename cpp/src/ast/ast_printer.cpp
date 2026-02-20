@@ -1,9 +1,51 @@
+/**
+ * @file ast_printer.cpp
+ * @brief CSGO 编程语言 AST 节点打印实现文件
+ *
+ * @author Aurorp1g
+ * @version 1.0
+ * @date 2026
+ *
+ * @section description 描述
+ * 本文件实现了 CSGO 语言抽象语法树（AST）节点的字符串序列化功能。
+ * 提供 toString() 方法将 AST 节点转换为可读的字符串表示，
+ * 主要用于调试、错误报告和AST可视化。
+ *
+ * @section features 功能特性
+ * - 支持所有 AST 节点类型的字符串序列化
+ * - 生成格式化的树形结构字符串
+ * - 包含完整的节点位置信息（行号、列号）
+ * - 支持嵌套节点的递归序列化
+ *
+ * @section usage 使用示例
+ * @code
+ * // 创建 AST 节点
+ * auto constant = std::make_unique<csgo::Constant>(csgo::Position(1, 1), 42);
+ *
+ * // 转换为字符串表示
+ * std::string repr = constant->toString();
+ * // 输出: "Constant(42, line=1, col=1)"
+ *
+ * // 打印整个模块
+ * std::cout << module->toString() << std::endl;
+ * @endcode
+ *
+ * @see ast_node.h AST节点类型定义
+ * @see Parser 语法分析器
+ */
+
 #include "ast/ast_node.h"
 #include <sstream>
 #include <iomanip>
 
 namespace csgo {
 
+/**
+ * @brief 获取 AST 节点类型的字符串名称
+ * @param type AST 节点类型枚举值
+ * @return 类型名称字符串，如 "Module", "FunctionDef" 等
+ * @note 用于调试输出和日志记录
+ */
 const char* ASTNode::getTypeName(ASTNodeType type) {
     switch (type) {
         case ASTNodeType::Module: return "Module";
@@ -108,6 +150,11 @@ const char* ASTNode::getTypeName(ASTNodeType type) {
     }
 }
 
+/**
+ * @brief 将 Constant 节点序列化为字符串
+ * @return 格式化的字符串表示，格式如：Constant(42, line=1, col=1)
+ * @details 支持所有常量类型：None, True, False, Ellipsis, 整数, 浮点数, 字符串, 字节串
+ */
 std::string Constant::toString() const {
     std::ostringstream oss;
     oss << "Constant(";
@@ -141,6 +188,11 @@ std::string Constant::toString() const {
     return oss.str();
 }
 
+/**
+ * @brief 将 Name 节点序列化为字符串
+ * @return 格式化的字符串表示，格式如：Name(id='x', ctx=Load, line=1, col=1)
+ * @details 包含变量标识符和上下文类型（Load/Store/Del）
+ */
 std::string Name::toString() const {
     std::ostringstream oss;
     oss << "Name(" << "id='" << id << "', ctx=";
@@ -163,6 +215,11 @@ std::string BinOp::toString() const {
     return oss.str();
 }
 
+/**
+ * @brief 将 UnaryOp 节点序列化为字符串
+ * @return 格式化的字符串表示，格式如：UnaryOp(USub, Name(...))
+ * @details 包含一元运算符类型和操作数
+ */
 std::string UnaryOp::toString() const {
     std::ostringstream oss;
     oss << "UnaryOp(" << getTypeName(op);

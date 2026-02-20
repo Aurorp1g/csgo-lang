@@ -124,6 +124,15 @@ class except_handler;
  */
 class arguments;
 
+/**
+ * @class comprehension
+ * @brief 推导式生成器节点
+ *
+ * 对应 CPython 的 ast.comprehension 节点。
+ * 表示推导式中的一个 for 子句：for target in iter [if condition]
+ */
+class comprehension;
+
 // ============================================================================
 // AST 节点类型枚举
 // ============================================================================
@@ -1411,8 +1420,8 @@ public:
  */
 class ListComp : public Expr {
 public:
-    std::unique_ptr<Expr> elt;                          ///< 元素表达式
-    std::vector<std::unique_ptr<Expr>> generators;    ///< 生成器/迭代器列表
+    std::unique_ptr<Expr> elt;                              ///< 元素表达式
+    std::vector<std::unique_ptr<comprehension>> generators; ///< 生成器/迭代器列表
     
     /**
      * @brief 默认构造函数
@@ -1442,8 +1451,8 @@ public:
  */
 class SetComp : public Expr {
 public:
-    std::unique_ptr<Expr> elt;                          ///< 元素表达式
-    std::vector<std::unique_ptr<Expr>> generators;    ///< 生成器/迭代器列表
+    std::unique_ptr<Expr> elt;                              ///< 元素表达式
+    std::vector<std::unique_ptr<comprehension>> generators; ///< 生成器/迭代器列表
     
     /**
      * @brief 默认构造函数
@@ -1474,9 +1483,9 @@ public:
  */
 class DictComp : public Expr {
 public:
-    std::unique_ptr<Expr> key;                          ///< 键表达式
-    std::unique_ptr<Expr> value;                       ///< 值表达式
-    std::vector<std::unique_ptr<Expr>> generators;    ///< 生成器/迭代器列表
+    std::unique_ptr<Expr> key;                              ///< 键表达式
+    std::unique_ptr<Expr> value;                           ///< 值表达式
+    std::vector<std::unique_ptr<comprehension>> generators; ///< 生成器/迭代器列表
     
     /**
      * @brief 默认构造函数
@@ -1508,8 +1517,8 @@ public:
  */
 class GeneratorExp : public Expr {
 public:
-    std::unique_ptr<Expr> elt;                          ///< 元素表达式
-    std::vector<std::unique_ptr<Expr>> generators;    ///< 生成器/迭代器列表
+    std::unique_ptr<Expr> elt;                              ///< 元素表达式
+    std::vector<std::unique_ptr<comprehension>> generators; ///< 生成器/迭代器列表
     
     /**
      * @brief 默认构造函数
