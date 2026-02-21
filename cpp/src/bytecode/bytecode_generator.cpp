@@ -472,7 +472,9 @@ void BytecodeGenerator::generate_from_instruction(const ir::Instruction& instr, 
 
     switch (instr.opcode()) {
         case ir::IROpcode::LOAD_CONST:
-            oparg = chunk->add_constant(instr.result());
+            if (instr.operand_count() > 0) {
+                oparg = chunk->add_constant(instr.operand(0));
+            }
             break;
 
         case ir::IROpcode::LOAD_FAST:

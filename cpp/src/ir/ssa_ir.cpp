@@ -555,16 +555,29 @@ std::string Instruction::to_string() const {
 
     switch (opcode_) {
         case IROpcode::LOAD_CONST:
-            oss << "LOAD_CONST " << (has_result() ? result_.to_string() : "");
+            oss << "LOAD_CONST ";
+            for (size_t i = 0; i < operands_.size(); ++i) {
+                if (i > 0) oss << ", ";
+                oss << operands_[i].to_string();
+            }
             break;
         case IROpcode::LOAD_FAST:
-            oss << "LOAD_FAST " << (has_result() ? result_.to_string() : "");
+            oss << "LOAD_FAST ";
+            if (!operands_.empty()) {
+                oss << operands_[0].to_string();
+            } else if (has_result()) {
+                oss << result_.to_string();
+            }
             break;
         case IROpcode::STORE_FAST:
             oss << "STORE_FAST " << (operands_.empty() ? "" : operands_[0].to_string());
             break;
         case IROpcode::BINARY_ADD:
-            oss << "BINARY_ADD";
+            oss << "BINARY_ADD ";
+            for (size_t i = 0; i < operands_.size(); ++i) {
+                if (i > 0) oss << ", ";
+                oss << operands_[i].to_string();
+            }
             break;
         case IROpcode::BINARY_SUBTRACT:
             oss << "BINARY_SUBTRACT";
@@ -957,7 +970,8 @@ std::string IRModule::to_string_detailed() const {
 
 IRBuilder::IRBuilder(const std::string& filename)
     : module_(std::make_unique<IRModule>(filename)),
-      current_block_(nullptr) {
+      current_block_(nullptr),
+      exit_block_(nullptr) {
     module_->set_filename(filename);
     module_->set_module_name("__main__");
 
@@ -1063,8 +1077,9 @@ Value& IRBuilder::top_value() {
 Value IRBuilder::emit_load_const(const Value& constant) {
     size_t idx = module_->add_constant(constant);
     auto instr = std::make_unique<Instruction>(IROpcode::LOAD_CONST);
-    Value result = Value::Temporary(temp_counter_++);  // 使用成员变量
+    Value result = Value::Temporary(temp_counter_++);
     instr->result() = result;
+    instr->add_operand(constant);
     current_block_->append_instruction(std::move(instr));
     return result;
 }
@@ -1886,20 +1901,30 @@ void IRBuilder::build_assert(const Assert& assert_stmt) {
 }
 
 Value IRBuilder::build_constant(const Constant& expr) {
+    Value const_value;
     switch (expr.value.index()) {
         case 0:
-            return Value::None();
+            const_value = Value::None();
+            break;
         case 1:
-            return Value::Bool(std::get<bool>(expr.value));
+            const_value = Value::Bool(std::get<bool>(expr.value));
+            break;
         case 2:
-            return Value::Int(std::get<int64_t>(expr.value));
+            const_value = Value::None();
+            break;
         case 3:
-            return Value::Float(std::get<double>(expr.value));
+            const_value = Value::Int(std::get<int64_t>(expr.value));
+            break;
         case 4:
-            return Value::String(std::get<std::string>(expr.value));
+            const_value = Value::Float(std::get<double>(expr.value));
+            break;
+        case 5:
+            const_value = Value::String(std::get<std::string>(expr.value));
+            break;
         default:
             return Value();
     }
+    return emit_load_const(const_value);
 }
 
 Value IRBuilder::build_name(const Name& expr) {
