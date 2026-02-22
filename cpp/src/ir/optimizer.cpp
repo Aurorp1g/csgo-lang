@@ -146,30 +146,87 @@ bool Optimizer::run_dead_code_elimination(IRModule* module) {
     return true;
 }
 
+// 替换第 125-150 行的 run_dead_store_elimination 函数
 bool Optimizer::run_dead_store_elimination(IRModule* module) {
     if (!module) return false;
 
-    collect_uses(module);
+    // 第一遍：收集所有被使用的变量（包括跨块使用）
+    std::unordered_set<std::string> used_variables;
+    
+    for (const auto& block : module->blocks()) {
+        for (const auto& instr_ptr : block->instructions()) {
+            const Instruction& instr = *instr_ptr;
+            
+            // 收集所有操作数中的变量引用
+            for (const auto& operand : instr.operands()) {
+                if (operand.kind() == Value::Kind::Variable) {
+                    used_variables.insert(operand.name());
+                }
+            }
+            
+            // 收集结果中的变量（确保结果的定义不被删除）
+            if (instr.has_result() && instr.result().kind() == Value::Kind::Variable) {
+                used_variables.insert(instr.result().name());
+            }
+            
+            // PHI指令的特殊处理：收集所有输入
+            if (instr.is_phi()) {
+                for (const auto& [pred_block, value] : instr.phi_operands()) {
+                    if (value.kind() == Value::Kind::Variable) {
+                        used_variables.insert(value.name());
+                    }
+                }
+            }
+        }
+    }
 
+    // 第二遍：删除未被使用的存储（仅限临时变量）
+    bool modified = false;
     for (auto& block : module->blocks()) {
         auto& instructions = block->instructions();
         for (auto it = instructions.begin(); it != instructions.end(); ) {
             const Instruction& instr = **it;
-            if (instr.is_store()) {
-                if (instr.operand_count() > 0) {
-                    const Value& stored_value = instr.operand(0);
-                    if (used_values_.find(&instr) == used_values_.end()) {
-                        it = instructions.erase(it);
-                        continue;
+            bool should_remove = false;
+            
+            if (instr.is_store() && instr.has_result()) {
+                const Value& result = instr.result();
+                const std::string& var_name = result.name();
+                
+                // 只删除未被使用的临时变量
+                // 命名变量（如用户定义的z）即使暂时未被使用也应保留
+                if (result.kind() == Value::Kind::Temporary) {
+                    if (used_variables.find(var_name) == used_variables.end()) {
+                        should_remove = true;
                     }
                 }
+                // 对于命名变量，检查是否是真正的死存储
+                // （同一变量后续被重新赋值且中间未被读取）
+                else if (result.kind() == Value::Kind::Variable) {
+                    // 检查后续是否有读取（简化版：保守保留）
+                    // 更精确的分析需要完整的SSA def-use链
+                }
             }
-            ++it;
+            
+            // 同时删除无效果的纯计算（如未使用的常量加载）
+            else if (instr.opcode() == IROpcode::LOAD_CONST && 
+                     instr.has_result() &&
+                     instr.result().kind() == Value::Kind::Temporary) {
+                if (used_variables.find(instr.result().name()) == used_variables.end()) {
+                    should_remove = true;
+                }
+            }
+
+            if (should_remove) {
+                it = instructions.erase(it);
+                modified = true;
+            } else {
+                ++it;
+            }
         }
     }
 
     pass_count_++;
-    return true;
+    return modified;
 }
 
 bool Optimizer::run_copy_propagation(IRModule* module) {
@@ -388,7 +445,7 @@ void Optimizer::eliminate_dead_blocks(IRModule* module) {
 void Optimizer::merge_blocks(IRModule* module) {
 }
 
-bool Optimizer::can_fold(const Instruction& instr) const {
+bool Optimizer::can_fold(const Instruction& instr) {
     switch (instr.opcode()) {
         case IROpcode::BINARY_ADD:
         case IROpcode::BINARY_SUBTRACT:
@@ -469,25 +526,71 @@ std::optional<Value> ConstantFolder::fold(const Instruction& instr) const {
     }
 }
 
+// 替换第 296-320 行的 fold_basic_block 函数
 void ConstantFolder::fold_basic_block(BasicBlock* block) {
     if (!block) return;
 
     auto& instructions = block->instructions();
-    for (auto& instr_ptr : instructions) {
-        Instruction& instr = *instr_ptr;
-        if (instr.operand_count() > 0) {  // 确保指令有操作数才尝试折叠
-            auto folded = fold(instr);
-            if (folded.has_value()) {
-                // 创建新的常量加载指令替代原指令
-                auto const_instr = std::make_unique<Instruction>(IROpcode::LOAD_CONST, folded.value());
-                if (instr.has_result()) {
-                    const_instr->result() = instr.result();
-                }
-                instr_ptr = std::move(const_instr);
-            }
+    size_t i = 0;
+    while (i < instructions.size()) {
+        Instruction& instr = *instructions[i];
+        
+        // 只尝试折叠可折叠的计算指令
+        if (!canFold(instr)) {
+            ++i;
+            continue;
         }
+        
+        // 确保所有操作数都是常量
+        if (!are_constants(instr.operands())) {
+            ++i;
+            continue;
+        }
+        
+        auto folded = fold(instr);
+        if (!folded.has_value()) {
+            ++i;
+            continue;
+        }
+        
+        // 创建 LOAD_CONST 指令加载折叠后的常量
+        auto const_instr = std::make_unique<Instruction>(
+            IROpcode::LOAD_CONST, folded.value());
+        
+        // 关键修复：如果原指令结果被赋值给命名变量，必须保留STORE
+        if (instr.has_result()) {
+            const Value& result = instr.result();
+            const_instr->result() = result;
+            
+            if (result.kind() == Value::Kind::Variable) {
+                // 情况1：命名变量（如 z = x + y）
+                // 替换为：LOAD_CONST folded_value, STORE_FAST z
+                instructions[i] = std::move(const_instr);
+                
+                // 插入 STORE_FAST 保留存储语义
+                auto store_instr = std::make_unique<Instruction>(
+                    IROpcode::STORE_FAST, result);
+                store_instr->result() = result;
+                
+                // 在 LOAD_CONST 后插入 STORE
+                instructions.insert(instructions.begin() + i + 1, 
+                                   std::move(store_instr));
+                i += 2;  // 跳过新插入的两条指令
+                continue;
+            }
+            else if (result.kind() == Value::Kind::Temporary) {
+                // 情况2：临时变量，直接替换
+                instructions[i] = std::move(const_instr);
+            }
+        } else {
+            // 无结果的计算（不应发生），直接替换
+            instructions[i] = std::move(const_instr);
+        }
+        
+        ++i;
     }
 
+    // 清理可能的空指针（防御性编程）
     instructions.erase(
         std::remove_if(instructions.begin(), instructions.end(),
             [](const std::unique_ptr<Instruction>& ptr) {
@@ -621,6 +724,36 @@ std::vector<Value> ConstantFolder::get_constants(const std::vector<Value>& value
     return result;
 }
 
+bool ConstantFolder::canFold(const Instruction& instr) const {
+    switch (instr.opcode()) {
+        case IROpcode::BINARY_ADD:
+        case IROpcode::BINARY_SUBTRACT:
+        case IROpcode::BINARY_MULTIPLY:
+        case IROpcode::BINARY_TRUE_DIVIDE:
+        case IROpcode::BINARY_FLOOR_DIVIDE:
+        case IROpcode::BINARY_MODULO:
+        case IROpcode::BINARY_POWER:
+        case IROpcode::BINARY_LSHIFT:
+        case IROpcode::BINARY_RSHIFT:
+        case IROpcode::BINARY_AND:
+        case IROpcode::BINARY_OR:
+        case IROpcode::BINARY_XOR:
+        case IROpcode::UNARY_POSITIVE:
+        case IROpcode::UNARY_NEGATIVE:
+        case IROpcode::UNARY_NOT:
+        case IROpcode::UNARY_INVERT:
+        case IROpcode::COMPARE_EQ:
+        case IROpcode::COMPARE_NE:
+        case IROpcode::COMPARE_LT:
+        case IROpcode::COMPARE_LE:
+        case IROpcode::COMPARE_GT:
+        case IROpcode::COMPARE_GE:
+            return instr.operand_count() >= 1;
+        default:
+            return false;
+    }
+}
+
 // ============================================================================
 // DeadCodeEliminator 类实现
 // ============================================================================
@@ -729,12 +862,15 @@ void DeadCodeEliminator::remove_dead_instructions(IRModule* module) {
             const Instruction& instr = **it;
 
             bool is_dead = false;
-            if (instr.is_store()) {
-                if (instr.operand_count() > 0) {
-                    const Value& val = instr.operand(0);
-                    if (val.kind() == Value::Kind::Temporary) {
-                        is_dead = true;
-                    }
+            
+            // 只删除没有结果的 LOAD_CONST 等指令
+            // 不删除 STORE_FAST 等存储指令，因为它们的操作数是临时变量是正常的
+            if (!instr.is_store() && !instr.is_call()) {
+                if (instr.has_result() && 
+                    instr.result().kind() == Value::Kind::Temporary &&
+                    instr.operand_count() == 0) {
+                    // 无操作数且结果是临时变量的指令是死代码
+                    is_dead = true;
                 }
             }
 

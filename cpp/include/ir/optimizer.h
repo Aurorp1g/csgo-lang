@@ -106,6 +106,10 @@ public:
     size_t get_instruction_count() const { return instruction_count_; }
     size_t get_optimized_count() const { return optimized_count_; }
 
+    // 辅助方法
+    bool can_fold(const Instruction& instr);
+    Value fold_instruction(const Instruction& instr) const;
+
 private:
     // 辅助方法
     bool is_constant(const Value& value) const;
@@ -114,8 +118,6 @@ private:
     void collect_uses(const IRModule* module);
     void eliminate_dead_blocks(IRModule* module);
     void merge_blocks(IRModule* module);
-    bool can_fold(const Instruction& instr) const;
-    Value fold_instruction(const Instruction& instr) const;
     void replace_uses(const Value& old_value, const Value& new_value);
 };
 
@@ -157,6 +159,9 @@ private:
     Value get_constant(const Value& value) const;
     bool are_constants(const std::vector<Value>& values) const;
     std::vector<Value> get_constants(const std::vector<Value>& values) const;
+    
+    // 检查指令是否可以折叠
+    bool canFold(const Instruction& instr) const;
 };
 
 // ============================================================================

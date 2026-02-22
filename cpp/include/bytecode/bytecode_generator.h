@@ -274,6 +274,12 @@ public:
 
     // 检查是否有参数
     bool has_arg() const {
+    // 二元运算指令 (24-33), 排除 22(BINARY_ADD) 和 23(BINARY_SUBTRACT)
+    if (opcode >= 24 && opcode <= 33) return true;
+        
+        // BINARY_OP 操作码 (107)
+        if (opcode == 107) return true;
+        
         return opcode >= static_cast<uint8_t>(BytecodeOpcode::EXTENDED_ARG) ||
                (opcode >= static_cast<uint8_t>(BytecodeOpcode::LOAD_FAST) && opcode <= static_cast<uint8_t>(BytecodeOpcode::LOAD_CLOSURE)) ||
                (opcode >= static_cast<uint8_t>(BytecodeOpcode::STORE_FAST) && opcode <= static_cast<uint8_t>(BytecodeOpcode::DELETE_DEREF)) ||

@@ -52,7 +52,8 @@ static bool has_arg(uint8_t opcode) {
     return opcode >= 144 ||
            (opcode >= 90 && opcode <= 93) ||
            (opcode >= 100 && opcode <= 143) ||
-           (opcode >= 1 && opcode <= 23);
+           (opcode >= 1 && opcode <= 21) ||
+           opcode == 57;  // CALL_FUNCTION 需要参数！
 }
 
 static size_t instr_size(uint32_t oparg) {
@@ -478,18 +479,31 @@ void BytecodeGenerator::generate_from_instruction(const ir::Instruction& instr, 
             break;
 
         case ir::IROpcode::LOAD_FAST:
-        case ir::IROpcode::STORE_FAST:
             if (instr.operand_count() > 0) {
+                // LOAD_FAST: operand(0) 是要加载的变量
                 const csgo::ir::Value& var = instr.operand(0);
                 oparg = chunk->add_varname(var.name());
             }
             break;
 
+        case ir::IROpcode::STORE_FAST:
+            // STORE_FAST: result() 是要存储到的变量，operand(0) 是要存储的值
+            if (instr.has_result()) {
+                const csgo::ir::Value& var = instr.result();
+                oparg = chunk->add_varname(var.name());
+            }
+            break;
+
         case ir::IROpcode::LOAD_GLOBAL:
+            if (instr.has_result()) {
+                oparg = chunk->add_name(instr.result().name());  // 全局变量名在result
+            }
+            break;
         case ir::IROpcode::STORE_GLOBAL:
-            if (instr.operand_count() > 0) {
-                const csgo::ir::Value& var = instr.operand(0);
-                oparg = chunk->add_name(var.name());
+            // STORE_GLOBAL需要特殊处理，变量名可能需要在metadata中
+            // 或者从instr.result()获取（如果设置了）
+            if (instr.has_result()) {
+                oparg = chunk->add_name(instr.result().name());
             }
             break;
 
@@ -515,7 +529,7 @@ void BytecodeGenerator::generate_from_instruction(const ir::Instruction& instr, 
         case ir::IROpcode::BINARY_AND:
         case ir::IROpcode::BINARY_OR:
         case ir::IROpcode::BINARY_XOR:
-            oparg = static_cast<uint32_t>(instr.opcode()) - static_cast<uint32_t>(ir::IROpcode::BINARY_ADD) + 22;
+            oparg = 0;  // BINARY_* 系列不需要参数
             break;
 
         case ir::IROpcode::COMPARE_EQ:
@@ -772,7 +786,7 @@ void BytecodeGenerator::generate_store_attr(const ir::Instruction& instr, Chunk*
 
 void BytecodeGenerator::generate_binary_op(const ir::Instruction& instr, Chunk* chunk) {
     if (!chunk) return;
-    uint32_t oparg = static_cast<uint32_t>(instr.opcode()) - static_cast<uint32_t>(ir::IROpcode::BINARY_ADD) + 22;
+    uint32_t oparg = 0;
     chunk->add_instruction(static_cast<uint8_t>(BytecodeOpcode::BINARY_OP), oparg);
 }
 

@@ -1089,17 +1089,26 @@ Value IRBuilder::emit_load_fast(const std::string& name) {
         throw std::runtime_error("No active scope");
     }
     auto& scope = scope_stack_.back();
+    
+    // 始终生成 LOAD_FAST 指令，但版本号保持当前值
+    size_t version = 0;
     auto it = scope.locals_.find(name);
-    if (it == scope.locals_.end()) {
-        size_t version = module_->get_next_ssa_version(name);
-        Value var = Value::Variable(name, version);
-        scope.locals_[name] = var;
-        auto instr = std::make_unique<Instruction>(IROpcode::LOAD_FAST, var);
-        instr->add_operand(var);
-        current_block_->append_instruction(std::move(instr));
-        return var;
+    if (it != scope.locals_.end()) {
+        // 变量已存在，使用当前版本号
+        version = it->second.ssa_version();
+    } else {
+        // 新变量，创建第一个版本
+        version = module_->get_next_ssa_version(name);
     }
-    return it->second;
+    
+    // 使用当前版本号，不要增加
+    Value var = Value::Variable(name, version);
+    // 不要更新 scope.locals_，保持原来的版本号
+    
+    auto instr = std::make_unique<Instruction>(IROpcode::LOAD_FAST, var);
+    instr->add_operand(var);
+    current_block_->append_instruction(std::move(instr));
+    return var;
 }
 
 Value IRBuilder::emit_store_fast(const std::string& name, const Value& value) {
@@ -1929,7 +1938,15 @@ Value IRBuilder::build_constant(const Constant& expr) {
 
 Value IRBuilder::build_name(const Name& expr) {
     if (expr.ctx == Name::Load) {
-        return emit_load_fast(expr.id);
+        // 先检查是否是局部变量
+        if (!scope_stack_.empty()) {
+            auto& scope = scope_stack_.back();
+            if (scope.locals_.find(expr.id) != scope.locals_.end()) {
+                return emit_load_fast(expr.id);
+            }
+        }
+        // 如果不是局部变量，使用 LOAD_GLOBAL
+        return emit_load_global(expr.id);
     } else {
         return make_temporary();
     }
