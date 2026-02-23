@@ -361,7 +361,18 @@ public:
     bool is_variable() const { return kind_ == Kind::Variable; }
     bool is_temporary() const { return kind_ == Kind::Temporary; }
     bool is_undefined() const { return kind_ == Kind::Undefined; }
-
+    // 获取常量数据变体（用于序列化）
+    std::variant<
+        std::nullptr_t,
+        bool,
+        int64_t,
+        double,
+        std::string,
+        std::vector<uint8_t>,
+        VariableName,
+        int
+    >& get_data() { return data_; }
+    
     // 获取变量标识符（用于SSA版本管理）
     std::string get_ssa_name() const;
 

@@ -171,13 +171,47 @@ std::vector<uint8_t> Chunk::serialize() const {
     data.push_back(static_cast<uint8_t>((consts_count >> 24) & 0xFF));
 
     for (const auto& constant : consts) {
-        std::string const_str = constant.to_string();  // 只调用一次，保存到局部变量
-        uint32_t const_size = const_str.size();
-        data.push_back(static_cast<uint8_t>(const_size & 0xFF));
-        data.push_back(static_cast<uint8_t>((const_size >> 8) & 0xFF));
-        data.push_back(static_cast<uint8_t>((const_size >> 16) & 0xFF));
-        data.push_back(static_cast<uint8_t>((const_size >> 24) & 0xFF));
-        data.insert(data.end(), const_str.begin(), const_str.end());  // 使用同一个对象
+        if (!constant.is_constant()) {
+            data.push_back(0);  // None
+            continue;
+        }
+        
+        auto& data_variant = const_cast<csgo::ir::Value&>(constant).get_data();
+        
+        try {
+            if (std::holds_alternative<std::nullptr_t>(data_variant)) {
+                data.push_back(0);  // None
+            } else if (std::holds_alternative<bool>(data_variant)) {
+                data.push_back(1);  // Bool
+                data.push_back(std::get<bool>(data_variant) ? 1 : 0);
+            } else if (std::holds_alternative<int64_t>(data_variant)) {
+                data.push_back(2);  // Int64
+                int64_t val = std::get<int64_t>(data_variant);
+                for (int i = 0; i < 8; i++) {
+                    data.push_back(static_cast<uint8_t>((val >> (i * 8)) & 0xFF));
+                }
+            } else if (std::holds_alternative<double>(data_variant)) {
+                data.push_back(3);  // Double
+                double val = std::get<double>(data_variant);
+                uint8_t* bytes = reinterpret_cast<uint8_t*>(&val);
+                for (int i = 0; i < 8; i++) {
+                    data.push_back(bytes[i]);
+                }
+            } else if (std::holds_alternative<std::string>(data_variant)) {
+                data.push_back(4);  // String
+                std::string val = std::get<std::string>(data_variant);
+                uint32_t str_size = val.size();
+                data.push_back(static_cast<uint8_t>(str_size & 0xFF));
+                data.push_back(static_cast<uint8_t>((str_size >> 8) & 0xFF));
+                data.push_back(static_cast<uint8_t>((str_size >> 16) & 0xFF));
+                data.push_back(static_cast<uint8_t>((str_size >> 24) & 0xFF));
+                data.insert(data.end(), val.begin(), val.end());
+            } else {
+                data.push_back(0);  // Unknown
+            }
+        } catch (...) {
+            data.push_back(0);
+        }
     }
 
     // 序列化名称

@@ -232,6 +232,59 @@ int main(int argc, char* argv[]) {
                             (data[consts_offset+2] << 16) | (data[consts_offset+3] << 24);
     std::cout << "Constants count: " << consts_count << std::endl;
     
+    // 解析并显示常量表
+    std::cout << std::endl << "=== Constants ===" << std::endl;
+    size_t const_idx = consts_offset + 4;
+    for (uint32_t i = 0; i < consts_count && const_idx < data.size(); i++) {
+        if (const_idx >= data.size()) break;
+        
+        uint8_t type = data[const_idx++];
+        std::cout << "  [" << i << "] ";
+        
+        switch (type) {
+            case 0:  // None
+                std::cout << "None";
+                break;
+            case 1:  // Bool
+                if (const_idx < data.size()) {
+                    std::cout << (data[const_idx++] ? "True" : "False");
+                }
+                break;
+            case 2:  // Int64
+                if (const_idx + 8 <= data.size()) {
+                    int64_t val = 0;
+                    for (int j = 0; j < 8; j++) {
+                        val |= (static_cast<int64_t>(data[const_idx++]) << (j * 8));
+                    }
+                    std::cout << val << " (int)";
+                }
+                break;
+            case 3:  // Double
+                if (const_idx + 8 <= data.size()) {
+                    double val;
+                    memcpy(&val, &data[const_idx], 8);
+                    const_idx += 8;
+                    std::cout << val << " (float)";
+                }
+                break;
+            case 4:  // String
+                if (const_idx + 4 <= data.size()) {
+                    uint32_t str_len = data[const_idx] | (data[const_idx+1] << 8) |
+                                       (data[const_idx+2] << 16) | (data[const_idx+3] << 24);
+                    const_idx += 4;
+                    std::cout << "\"";
+                    for (uint32_t j = 0; j < str_len && const_idx < data.size(); j++) {
+                        std::cout << static_cast<char>(data[const_idx++]);
+                    }
+                    std::cout << "\"";
+                }
+                break;
+            default:
+                std::cout << "Unknown type: " << (int)type;
+        }
+        std::cout << std::endl;
+    }
+    
     // 调试输出
     std::cout << "[DEBUG] code_start: " << std::dec << code_start << std::endl;
     std::cout << "[DEBUG] code_size: " << code_size << std::endl;
