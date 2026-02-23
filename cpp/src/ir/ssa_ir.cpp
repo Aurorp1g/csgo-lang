@@ -1754,20 +1754,28 @@ void IRBuilder::build_if(const If& if_stmt) {
     BasicBlock* else_block = if_stmt.orelse.empty() ? nullptr : new_block("if_else");
     BasicBlock* merge_block = new_block("if_merge");
 
-    emit_jump_if_false(condition, then_block);
-
+    // 正确的控制流：
+    // - 条件为真 → 执行 if 分支 (then_block)
+    // - 条件为假 → 执行 else 分支 (else_block)
+    // POP_JUMP_IF_FALSE 条件为假时跳转，所以跳转到 else 分支
     if (else_block) {
-        emit_jump(else_block);
+        emit_jump_if_false(condition, else_block);
     } else {
-        emit_jump(merge_block);
+        // 如果没有 else 分支，条件为假时直接跳到 merge
+        emit_jump_if_false(condition, merge_block);
     }
+    
+    // 显式跳转到 then_block（条件为真时执行）
+    emit_jump(then_block);
 
+    // if 分支
     append_block(then_block);
     for (const auto& stmt : if_stmt.body) {
         build_from_statement(*stmt);
     }
     emit_jump(merge_block);
 
+    // else 分支
     if (else_block) {
         append_block(else_block);
         for (const auto& stmt : if_stmt.orelse) {

@@ -785,7 +785,7 @@ void DeadCodeEliminator::eliminate_unreachable(IRModule* module) {
             }
         }
     }
-
+    
     auto& blocks = const_cast<std::vector<std::unique_ptr<BasicBlock>>&>(module->blocks());
     blocks.erase(
         std::remove_if(blocks.begin(), blocks.end(),
@@ -819,6 +819,21 @@ void DeadCodeEliminator::collect_live_instructions(IRModule* module) {
                 if (instr.operand_count() > 0) {
                     stack.push(&instr);
                 }
+            }
+
+            // 函数调用有副作用，应该是活指令
+            if (instr.opcode() == IROpcode::CALL_FUNCTION ||
+                instr.opcode() == IROpcode::CALL_FUNCTION_KW ||
+                instr.opcode() == IROpcode::CALL_FUNCTION_EX ||
+                instr.opcode() == IROpcode::CALL_METHOD) {
+                live_instructions_.insert(&instr);
+            }
+
+            // 条件跳转和无条件跳转应该保留（控制流）
+            if (instr.opcode() == IROpcode::JUMP ||
+                instr.opcode() == IROpcode::JUMP_IF_TRUE ||
+                instr.opcode() == IROpcode::JUMP_IF_FALSE) {
+                live_instructions_.insert(&instr);
             }
 
             if (instr.has_result() &&
@@ -863,9 +878,15 @@ void DeadCodeEliminator::remove_dead_instructions(IRModule* module) {
 
             bool is_dead = false;
             
+            // 检查是否是控制流指令
+            bool is_control_flow = (instr.opcode() == IROpcode::JUMP ||
+                                   instr.opcode() == IROpcode::JUMP_IF_TRUE ||
+                                   instr.opcode() == IROpcode::JUMP_IF_FALSE ||
+                                   instr.opcode() == IROpcode::RETURN_VALUE);
+            
             // 只删除没有结果的 LOAD_CONST 等指令
             // 不删除 STORE_FAST 等存储指令，因为它们的操作数是临时变量是正常的
-            if (!instr.is_store() && !instr.is_call()) {
+            if (!instr.is_store() && !instr.is_call() && !is_control_flow) {
                 if (instr.has_result() && 
                     instr.result().kind() == Value::Kind::Temporary &&
                     instr.operand_count() == 0) {
@@ -959,39 +980,78 @@ void ControlFlowOptimizer::merge_blocks(IRModule* module) {
         Instruction* last = block->last_instruction();
         if (!last) continue;
 
-        if (last->opcode() == IROpcode::JUMP && last->target()) {
-            BasicBlock* target = last->target();
-            if (target && target->predecessors().size() == 1) {
-                BasicBlock* pred = block;
-                BasicBlock* succ = target;
+        // 只处理无条件跳转
+        if (last->opcode() != IROpcode::JUMP) continue;
+        
+        BasicBlock* target = last->target();
+        if (!target) continue;
+        
+        // 重要：禁止合并条件跳转的目标块！
+        // 检查当前块的最后一条指令之前是否是条件跳转
+        // 如果是，说明这个JUMP是从if分支出来的，不能合并
+        bool has_conditional_jump_before = false;
+        if (block->instruction_count() >= 2) {
+            Instruction* prev = block->instruction_at(block->instruction_count() - 2);
+            if (prev && (prev->opcode() == IROpcode::JUMP_IF_TRUE ||
+                         prev->opcode() == IROpcode::JUMP_IF_FALSE)) {
+                has_conditional_jump_before = true;
+            }
+        }
+        
+        // 如果目标块有多个后继，说明它是控制流分支点（如if分支），不能合并
+        if (target->successors().size() > 1) continue;
+        
+        // 如果当前块之前有条件跳转，说明这是if-else结构，不能合并
+        if (has_conditional_jump_before) continue;
 
-                if (succ->predecessors().size() == 1) {
-                    std::vector<std::unique_ptr<Instruction>>& target_instrs =
-                        const_cast<std::vector<std::unique_ptr<Instruction>>&>(succ->instructions());
+        if (target->predecessors().size() == 1) {
+            BasicBlock* pred = block;
+            BasicBlock* succ = target;
 
-                    for (auto& target_instr : target_instrs) {
-                        block->append_instruction(std::make_unique<Instruction>(*target_instr));
-                    }
+            if (succ->predecessors().size() == 1) {
+                // 只有当后继块只有一条JUMP指令时才合并（纯跳转块）
+                if (succ->instruction_count() != 1) continue;
+                Instruction* succ_last = succ->last_instruction();
+                if (!succ_last || succ_last->opcode() != IROpcode::JUMP) continue;
 
-                    pred->remove_successor(succ);
-                    pred->clear_instructions();
+                std::vector<std::unique_ptr<Instruction>>& target_instrs =
+                    const_cast<std::vector<std::unique_ptr<Instruction>>&>(succ->instructions());
 
-                    BasicBlock* next_target = nullptr;
-                    Instruction* next_last = block->last_instruction();
-                    if (next_last && next_last->opcode() == IROpcode::JUMP) {
-                        next_target = next_last->target();
-                    }
-
-                    for (BasicBlock* old_succ : succ->successors()) {
-                        old_succ->remove_predecessor(succ);
-                        if (next_target) {
-                            old_succ->add_predecessor(block);
-                            block->add_successor(old_succ);
-                        }
-                    }
-
-                    it = module->blocks().begin();
+                // 移除末尾的 JUMP 指令（因为我们要合并了）
+                block->remove_instruction(block->instruction_count() - 1);
+                
+                // 将后继块的指令追加到当前块
+                for (auto& target_instr : target_instrs) {
+                    block->append_instruction(std::make_unique<Instruction>(*target_instr));
                 }
+
+                pred->remove_successor(succ);
+
+                BasicBlock* next_target = nullptr;
+                Instruction* next_last = block->last_instruction();
+                if (next_last && next_last->opcode() == IROpcode::JUMP) {
+                    next_target = next_last->target();
+                }
+
+                for (BasicBlock* old_succ : succ->successors()) {
+                    old_succ->remove_predecessor(succ);
+                    if (next_target) {
+                        old_succ->add_predecessor(block);
+                        block->add_successor(old_succ);
+                    }
+                }
+                
+                // 删除被合并的后继块，防止它变成僵尸块被错误删除
+                auto& blocks = const_cast<std::vector<std::unique_ptr<BasicBlock>>&>(module->blocks());
+                blocks.erase(
+                    std::remove_if(blocks.begin(), blocks.end(),
+                        [succ](const std::unique_ptr<BasicBlock>& b) {
+                            return b.get() == succ;
+                        }),
+                    blocks.end()
+                );
+
+                it = module->blocks().begin();
             }
         }
     }
@@ -1103,6 +1163,20 @@ void ControlFlowOptimizer::thread_jumps(IRModule* module) {
                 BasicBlock* new_target = target_last->target();
                 if (new_target == block.get()) break;
 
+                // 重要：正确更新前驱/后继关系
+                BasicBlock* old_target = target;
+                
+                // 更新当前块的后继
+                block->remove_successor(old_target);
+                block->add_successor(new_target);
+                
+                // 更新新目标的 前驱
+                new_target->add_predecessor(block.get());
+                
+                // 更新旧目标的前驱（不再指向当前块）
+                old_target->remove_predecessor(block.get());
+                
+                // 更新跳转指令的目标
                 last->set_target(new_target);
                 target = new_target;
             }

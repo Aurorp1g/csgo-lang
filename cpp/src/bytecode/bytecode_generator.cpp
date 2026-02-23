@@ -52,6 +52,8 @@ static bool has_arg(uint8_t opcode) {
     return opcode >= 144 ||
            (opcode >= 90 && opcode <= 93) ||
            (opcode >= 100 && opcode <= 143) ||
+           (opcode >= 110 && opcode <= 114) ||  // 更多跳转指令
+           (opcode >= 40 && opcode <= 44) ||    // 条件/无条件跳转
            (opcode >= 1 && opcode <= 21) ||
            opcode == 57;  // CALL_FUNCTION 需要参数！
 }
@@ -485,8 +487,16 @@ std::unique_ptr<Chunk> BytecodeGenerator::generate(ir::IRModule* module) {
     chunk->varnames = module->varnames();
     chunk->nlocals = chunk->varnames.size();
 
-    // 计算指令计数
-    chunk->instruction_count = chunk->code.size();
+    // 计算指令计数 - 遍历指令计算实际数量
+    size_t actual_instruction_count = 0;
+    for (const auto& block : module->blocks()) {
+        for (const auto& instr_ptr : block->instructions()) {
+            const ir::Instruction& instr = *instr_ptr;
+            uint8_t bc_opcode = static_cast<uint8_t>(ir_opcode_to_bytecode(instr.opcode()));
+            actual_instruction_count++;
+        }
+    }
+    chunk->instruction_count = actual_instruction_count;
 
     return chunk;
 }

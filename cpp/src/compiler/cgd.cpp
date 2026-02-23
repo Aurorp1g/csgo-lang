@@ -12,6 +12,7 @@
 #include <vector>
 #include <iomanip>
 #include <cstdint>
+#include <map>
 
 #include "bytecode/bytecode_generator.h"
 
@@ -210,6 +211,8 @@ int main(int argc, char* argv[]) {
         uint8_t opcode = data[idx];
         code_size += 1;
         bool has_arg = (opcode >= 1 && opcode <= 21) ||
+                       (opcode >= 40 && opcode <= 44) ||  // 条件/无条件跳转
+                       (opcode >= 110 && opcode <= 114) ||  // 更多跳转指令
                        opcode == 57 ||  // CALL_FUNCTION
                        opcode == 107 ||  // BINARY_OP
                        (opcode >= 100 && opcode <= 143) ||
@@ -361,17 +364,46 @@ int main(int argc, char* argv[]) {
     idx = code_start;
     instr_count = 0;
     
+    // 构建指令索引到字节偏移的映射
+    std::map<size_t, size_t> instr_idx_to_offset;
+    size_t temp_idx = code_start;
+    int temp_count = 0;
+    while (temp_idx < data.size() && temp_count < (int)instruction_count) {
+        uint8_t temp_opcode = data[temp_idx];
+        instr_idx_to_offset[temp_count] = temp_idx;
+        
+        bool temp_has_arg = (temp_opcode >= 1 && temp_opcode <= 21) ||
+                           (temp_opcode >= 40 && temp_opcode <= 44) ||
+                           (temp_opcode >= 110 && temp_opcode <= 114) ||
+                           temp_opcode == 57 ||
+                           temp_opcode == 107 ||
+                           (temp_opcode >= 100 && temp_opcode <= 143) ||
+                           (temp_opcode >= 90 && temp_opcode <= 93);
+        
+        if (temp_has_arg && temp_idx + 1 < data.size()) {
+            temp_idx += 2;
+        } else {
+            temp_idx += 1;
+        }
+        temp_count++;
+    }
+    
+    // 构建字节偏移到指令索引的映射
+    std::map<size_t, size_t> offset_to_instr_idx;
+    for (auto& pair : instr_idx_to_offset) {
+        offset_to_instr_idx[pair.second] = pair.first;
+    }
+    
     while (idx < data.size() && instr_count < (int)instruction_count) {
         uint8_t opcode = data[idx];
-        
-        // [DEBUG] 添加调试输出
-        std::cout << "[DEBUG] idx=" << idx << " opcode=" << (int)opcode;
         
         std::cout << std::dec << std::setfill(' ') << std::setw(4) << instr_count 
                   << ": " << get_opcode_name(opcode);
         
         // 检查是否有参数
         bool has_arg = (opcode >= 1 && opcode <= 21) ||
+                       (opcode >= 40 && opcode <= 44) ||  // 条件/无条件跳转
+                       (opcode >= 110 && opcode <= 114) ||  // 更多跳转指令
                        opcode == 57 ||  // CALL_FUNCTION
                        opcode == 107 ||  // BINARY_OP
                        (opcode >= 100 && opcode <= 143) ||
@@ -379,7 +411,29 @@ int main(int argc, char* argv[]) {
         
         if (has_arg && idx + 1 < data.size()) {
             uint8_t arg = data[idx+1];
-            std::cout << " " << (int)arg;
+            size_t next_instr_offset = idx + 2;
+            
+            // 检查是否是跳转指令
+            bool is_jump = (opcode >= 40 && opcode <= 44) ||
+                          (opcode >= 110 && opcode <= 114);
+            
+            if (is_jump) {
+                // 跳转目标是相对于chunk开始的绝对偏移，需要加上code_start
+                // 生成器存储的是block在chunk中的绝对偏移
+                size_t abs_target_offset = code_start + static_cast<size_t>(arg);
+                
+                          
+                if (offset_to_instr_idx.count(abs_target_offset)) {
+                    // 显示指令索引
+                    std::cout << " " << offset_to_instr_idx[abs_target_offset];
+                } else {
+                    // 普通参数直接显示
+                    std::cout << " " << (int)arg;
+                }
+            } else {
+                // 普通参数直接显示
+                std::cout << " " << (int)arg;
+            }
             idx += 2;
         } else {
             idx += 1;
