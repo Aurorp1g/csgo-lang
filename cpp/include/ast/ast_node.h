@@ -3,7 +3,7 @@
  * @brief CSGO 编程语言抽象语法树（AST）定义头文件
  *
  * @author Aurorp1g
- * @version 1.0
+ * @version 2.0
  * @date 2026
  *
  * @section description 描述
@@ -19,6 +19,7 @@
  * - 支持 f-string 和格式化字符串
  * - 支持协程、async/await 异步编程
  * - 支持 Python 风格缩进和作用域
+ * - 支持格式化的 AST 输出（带缩进）
  *
  * @section usage 使用示例
  * @code
@@ -34,6 +35,9 @@
  *     csgo::ASTNodeType::Add,
  *     std::make_unique<csgo::Constant>(csgo::Position(1, 5), 10)
  * );
+ *
+ * // 打印格式化的 AST
+ * std::cout << binop->toString(0) << std::endl;
  * @endcode
  *
  * @see Parser 语法分析器
@@ -363,6 +367,7 @@ struct Position {
  * - 使用虚函数实现多态
  * - 提供位置信息用于错误报告
  * - 支持 toString() 方法用于调试和序列化
+ * - 支持带缩进的 toString(int) 方法用于格式化输出
  *
  * @see Expr 表达式节点基类
  * @see Stmt 语句节点基类
@@ -391,10 +396,18 @@ public:
     virtual ~ASTNode() = default;
     
     /**
-     * @brief 获取节点的字符串表示
+     * @brief 获取节点的字符串表示（单行格式）
      * @return 格式化的字符串，用于调试和序列化
      */
     virtual std::string toString() const = 0;
+    
+    /**
+     * @brief 获取节点的字符串表示（带缩进格式）
+     * @param indent 缩进级别（每级2个空格）
+     * @return 格式化的字符串，用于调试和可视化
+     * @note 从缩进级别0开始调用可获得完整格式化的输出
+     */
+    virtual std::string toString(int indent) const = 0;
     
     /**
      * @brief 获取节点类型名称
@@ -486,9 +499,9 @@ public:
         std::vector<uint8_t>     ///< 字节串
     > value;
     
-    // =========================================================================
+    // =====================================================================
     // 类型查询辅助方法
-    // =========================================================================
+    // =====================================================================
     
     /**
      * @brief 检查是否为 None
@@ -538,9 +551,9 @@ public:
      */
     bool isBytes() const { return std::holds_alternative<std::vector<uint8_t>>(value); }
     
-    // =========================================================================
+    // =====================================================================
     // 值获取辅助方法
-    // =========================================================================
+    // =====================================================================
     
     /**
      * @brief 获取整数值
@@ -596,10 +609,17 @@ public:
     Constant(const Position& pos, const std::string& val) : Expr(ASTNodeType::Constant, pos), value(val) {}
     
     /**
-     * @brief 获取节点的字符串表示
+     * @brief 获取节点的字符串表示（单行格式）
      * @return 格式化的字符串
      */
     std::string toString() const override;
+    
+    /**
+     * @brief 获取节点的字符串表示（带缩进格式）
+     * @param indent 缩进级别
+     * @return 格式化的字符串
+     */
+    std::string toString(int indent) const override;
 };
 
 // ============================================================================
@@ -658,10 +678,17 @@ public:
         : Expr(ASTNodeType::Name, pos), id(name), ctx(context) {}
     
     /**
-     * @brief 获取节点的字符串表示
+     * @brief 获取节点的字符串表示（单行格式）
      * @return 格式化的字符串
      */
     std::string toString() const override;
+    
+    /**
+     * @brief 获取节点的字符串表示（带缩进格式）
+     * @param indent 缩进级别
+     * @return 格式化的字符串
+     */
+    std::string toString(int indent) const override;
 };
 
 // ============================================================================
@@ -731,10 +758,17 @@ public:
         : Expr(ASTNodeType::BinOp, pos), left(std::move(l)), op(oper), right(std::move(r)) {}
     
     /**
-     * @brief 获取节点的字符串表示
+     * @brief 获取节点的字符串表示（单行格式）
      * @return 格式化的字符串
      */
     std::string toString() const override;
+    
+    /**
+     * @brief 获取节点的字符串表示（带缩进格式）
+     * @param indent 缩进级别
+     * @return 格式化的字符串
+     */
+    std::string toString(int indent) const override;
 };
 
 /**
@@ -793,10 +827,17 @@ public:
         : Expr(ASTNodeType::UnaryOp, pos), op(oper), operand(std::move(expr)) {}
     
     /**
-     * @brief 获取节点的字符串表示
+     * @brief 获取节点的字符串表示（单行格式）
      * @return 格式化的字符串
      */
     std::string toString() const override;
+    
+    /**
+     * @brief 获取节点的字符串表示（带缩进格式）
+     * @param indent 缩进级别
+     * @return 格式化的字符串
+     */
+    std::string toString(int indent) const override;
 };
 
 /**
@@ -861,10 +902,17 @@ public:
           ops(std::move(operators)), comparators(std::move(comps)) {}
     
     /**
-     * @brief 获取节点的字符串表示
+     * @brief 获取节点的字符串表示（单行格式）
      * @return 格式化的字符串
      */
     std::string toString() const override;
+    
+    /**
+     * @brief 获取节点的字符串表示（带缩进格式）
+     * @param indent 缩进级别
+     * @return 格式化的字符串
+     */
+    std::string toString(int indent) const override;
 };
 
 // ============================================================================
@@ -923,10 +971,17 @@ public:
         : Expr(ASTNodeType::BoolOp), op(oper), values(std::move(vals)) {}
     
     /**
-     * @brief 获取节点的字符串表示
+     * @brief 获取节点的字符串表示（单行格式）
      * @return 格式化的字符串
      */
     std::string toString() const override;
+    
+    /**
+     * @brief 获取节点的字符串表示（带缩进格式）
+     * @param indent 缩进级别
+     * @return 格式化的字符串
+     */
+    std::string toString(int indent) const override;
 };
 
 // ============================================================================
@@ -975,10 +1030,17 @@ public:
         : Expr(ASTNodeType::Call), func(std::move(function)) {}
     
     /**
-     * @brief 获取节点的字符串表示
+     * @brief 获取节点的字符串表示（单行格式）
      * @return 格式化的字符串
      */
     std::string toString() const override;
+    
+    /**
+     * @brief 获取节点的字符串表示（带缩进格式）
+     * @param indent 缩进级别
+     * @return 格式化的字符串
+     */
+    std::string toString(int indent) const override;
 };
 
 /**
@@ -1019,10 +1081,17 @@ public:
         : Expr(ASTNodeType::IfExp), test(std::move(cond)), body(std::move(then)), orelse(std::move(else_)) {}
     
     /**
-     * @brief 获取节点的字符串表示
+     * @brief 获取节点的字符串表示（单行格式）
      * @return 格式化的字符串
      */
     std::string toString() const override;
+    
+    /**
+     * @brief 获取节点的字符串表示（带缩进格式）
+     * @param indent 缩进级别
+     * @return 格式化的字符串
+     */
+    std::string toString(int indent) const override;
 };
 
 /**
@@ -1064,10 +1133,17 @@ public:
         : Expr(ASTNodeType::Lambda), args(std::move(parameters)), body(std::move(expr)) {}
     
     /**
-     * @brief 获取节点的字符串表示
+     * @brief 获取节点的字符串表示（单行格式）
      * @return 格式化的字符串
      */
     std::string toString() const override;
+    
+    /**
+     * @brief 获取节点的字符串表示（带缩进格式）
+     * @param indent 缩进级别
+     * @return 格式化的字符串
+     */
+    std::string toString(int indent) const override;
 };
 
 // ============================================================================
@@ -1102,10 +1178,17 @@ public:
     Dict() : Expr(ASTNodeType::Dict) {}
     
     /**
-     * @brief 获取节点的字符串表示
+     * @brief 获取节点的字符串表示（单行格式）
      * @return 格式化的字符串
      */
     std::string toString() const override;
+    
+    /**
+     * @brief 获取节点的字符串表示（带缩进格式）
+     * @param indent 缩进级别
+     * @return 格式化的字符串
+     */
+    std::string toString(int indent) const override;
 };
 
 /**
@@ -1134,10 +1217,17 @@ public:
     Set() : Expr(ASTNodeType::Set) {}
     
     /**
-     * @brief 获取节点的字符串表示
+     * @brief 获取节点的字符串表示（单行格式）
      * @return 格式化的字符串
      */
     std::string toString() const override;
+    
+    /**
+     * @brief 获取节点的字符串表示（带缩进格式）
+     * @param indent 缩进级别
+     * @return 格式化的字符串
+     */
+    std::string toString(int indent) const override;
 };
 
 /**
@@ -1179,10 +1269,17 @@ public:
         : Expr(ASTNodeType::List), elts(std::move(elements)), ctx(Load) {}
     
     /**
-     * @brief 获取节点的字符串表示
+     * @brief 获取节点的字符串表示（单行格式）
      * @return 格式化的字符串
      */
     std::string toString() const override;
+    
+    /**
+     * @brief 获取节点的字符串表示（带缩进格式）
+     * @param indent 缩进级别
+     * @return 格式化的字符串
+     */
+    std::string toString(int indent) const override;
 };
 
 /**
@@ -1212,10 +1309,17 @@ public:
     Tuple() : Expr(ASTNodeType::Tuple), ctx(Load) {}
     
     /**
-     * @brief 获取节点的字符串表示
+     * @brief 获取节点的字符串表示（单行格式）
      * @return 格式化的字符串
      */
     std::string toString() const override;
+    
+    /**
+     * @brief 获取节点的字符串表示（带缩进格式）
+     * @param indent 缩进级别
+     * @return 格式化的字符串
+     */
+    std::string toString(int indent) const override;
 };
 
 // ============================================================================
@@ -1266,10 +1370,17 @@ public:
         : Expr(ASTNodeType::Subscript), value(std::move(val)), slice(std::move(idx)) {}
     
     /**
-     * @brief 获取节点的字符串表示
+     * @brief 获取节点的字符串表示（单行格式）
      * @return 格式化的字符串
      */
     std::string toString() const override;
+    
+    /**
+     * @brief 获取节点的字符串表示（带缩进格式）
+     * @param indent 缩进级别
+     * @return 格式化的字符串
+     */
+    std::string toString(int indent) const override;
 };
 
 /**
@@ -1316,10 +1427,17 @@ public:
         : Expr(ASTNodeType::Attribute), value(std::move(val)), attr(attribute) {}
     
     /**
-     * @brief 获取节点的字符串表示
+     * @brief 获取节点的字符串表示（单行格式）
      * @return 格式化的字符串
      */
     std::string toString() const override;
+    
+    /**
+     * @brief 获取节点的字符串表示（带缩进格式）
+     * @param indent 缩进级别
+     * @return 格式化的字符串
+     */
+    std::string toString(int indent) const override;
 };
 
 /**
@@ -1359,10 +1477,17 @@ public:
         : Expr(ASTNodeType::Starred), value(std::move(val)), ctx(context) {}
     
     /**
-     * @brief 获取节点的字符串表示
+     * @brief 获取节点的字符串表示（单行格式）
      * @return 格式化的字符串
      */
     std::string toString() const override;
+    
+    /**
+     * @brief 获取节点的字符串表示（带缩进格式）
+     * @param indent 缩进级别
+     * @return 格式化的字符串
+     */
+    std::string toString(int indent) const override;
 };
 
 /**
@@ -1393,10 +1518,17 @@ public:
     Slice() : Expr(ASTNodeType::Slice) {}
     
     /**
-     * @brief 获取节点的字符串表示
+     * @brief 获取节点的字符串表示（单行格式）
      * @return 格式化的字符串
      */
     std::string toString() const override;
+    
+    /**
+     * @brief 获取节点的字符串表示（带缩进格式）
+     * @param indent 缩进级别
+     * @return 格式化的字符串
+     */
+    std::string toString(int indent) const override;
 };
 
 /**
@@ -1429,10 +1561,17 @@ public:
     ListComp() : Expr(ASTNodeType::ListComp), elt(nullptr) {}
     
     /**
-     * @brief 获取节点的字符串表示
+     * @brief 获取节点的字符串表示（单行格式）
      * @return 格式化的字符串
      */
     std::string toString() const override;
+    
+    /**
+     * @brief 获取节点的字符串表示（带缩进格式）
+     * @param indent 缩进级别
+     * @return 格式化的字符串
+     */
+    std::string toString(int indent) const override;
 };
 
 /**
@@ -1460,10 +1599,17 @@ public:
     SetComp() : Expr(ASTNodeType::SetComp), elt(nullptr) {}
     
     /**
-     * @brief 获取节点的字符串表示
+     * @brief 获取节点的字符串表示（单行格式）
      * @return 格式化的字符串
      */
     std::string toString() const override;
+    
+    /**
+     * @brief 获取节点的字符串表示（带缩进格式）
+     * @param indent 缩进级别
+     * @return 格式化的字符串
+     */
+    std::string toString(int indent) const override;
 };
 
 /**
@@ -1493,10 +1639,17 @@ public:
     DictComp() : Expr(ASTNodeType::DictComp), key(nullptr), value(nullptr) {}
     
     /**
-     * @brief 获取节点的字符串表示
+     * @brief 获取节点的字符串表示（单行格式）
      * @return 格式化的字符串
      */
     std::string toString() const override;
+    
+    /**
+     * @brief 获取节点的字符串表示（带缩进格式）
+     * @param indent 缩进级别
+     * @return 格式化的字符串
+     */
+    std::string toString(int indent) const override;
 };
 
 /**
@@ -1526,10 +1679,17 @@ public:
     GeneratorExp() : Expr(ASTNodeType::GeneratorExp), elt(nullptr) {}
     
     /**
-     * @brief 获取节点的字符串表示
+     * @brief 获取节点的字符串表示（单行格式）
      * @return 格式化的字符串
      */
     std::string toString() const override;
+    
+    /**
+     * @brief 获取节点的字符串表示（带缩进格式）
+     * @param indent 缩进级别
+     * @return 格式化的字符串
+     */
+    std::string toString(int indent) const override;
 };
 
 // ============================================================================
@@ -1553,6 +1713,8 @@ public:
  * // yield (空值)
  * auto empty_yield = std::make_unique<Yield>();
  * @endcode
+ *
+ * @note yield 语句只能在函数内部使用
  */
 class Yield : public Expr {
 public:
@@ -1570,10 +1732,17 @@ public:
     Yield(std::unique_ptr<Expr> val) : Expr(ASTNodeType::Yield), value(std::move(val)) {}
     
     /**
-     * @brief 获取节点的字符串表示
+     * @brief 获取节点的字符串表示（单行格式）
      * @return 格式化的字符串
      */
     std::string toString() const override;
+    
+    /**
+     * @brief 获取节点的字符串表示（带缩进格式）
+     * @param indent 缩进级别
+     * @return 格式化的字符串
+     */
+    std::string toString(int indent) const override;
 };
 
 /**
@@ -1607,10 +1776,17 @@ public:
     YieldFrom(std::unique_ptr<Expr> val) : Expr(ASTNodeType::YieldFrom), value(std::move(val)) {}
     
     /**
-     * @brief 获取节点的字符串表示
+     * @brief 获取节点的字符串表示（单行格式）
      * @return 格式化的字符串
      */
     std::string toString() const override;
+    
+    /**
+     * @brief 获取节点的字符串表示（带缩进格式）
+     * @param indent 缩进级别
+     * @return 格式化的字符串
+     */
+    std::string toString(int indent) const override;
 };
 
 /**
@@ -1646,10 +1822,17 @@ public:
     Await(std::unique_ptr<Expr> val) : Expr(ASTNodeType::Await), value(std::move(val)) {}
     
     /**
-     * @brief 获取节点的字符串表示
+     * @brief 获取节点的字符串表示（单行格式）
      * @return 格式化的字符串
      */
     std::string toString() const override;
+    
+    /**
+     * @brief 获取节点的字符串表示（带缩进格式）
+     * @param indent 缩进级别
+     * @return 格式化的字符串
+     */
+    std::string toString(int indent) const override;
 };
 
 // ============================================================================
@@ -1708,10 +1891,17 @@ public:
         : Expr(ASTNodeType::FormattedValue), value(std::move(val)), conversion(conv) {}
     
     /**
-     * @brief 获取节点的字符串表示
+     * @brief 获取节点的字符串表示（单行格式）
      * @return 格式化的字符串
      */
     std::string toString() const override;
+    
+    /**
+     * @brief 获取节点的字符串表示（带缩进格式）
+     * @param indent 缩进级别
+     * @return 格式化的字符串
+     */
+    std::string toString(int indent) const override;
 };
 
 /**
@@ -1742,10 +1932,17 @@ public:
     JoinedStr() : Expr(ASTNodeType::JoinedStr) {}
     
     /**
-     * @brief 获取节点的字符串表示
+     * @brief 获取节点的字符串表示（单行格式）
      * @return 格式化的字符串
      */
     std::string toString() const override;
+    
+    /**
+     * @brief 获取节点的字符串表示（带缩进格式）
+     * @param indent 缩进级别
+     * @return 格式化的字符串
+     */
+    std::string toString(int indent) const override;
 };
 
 // ============================================================================
@@ -1821,10 +2018,17 @@ public:
     FunctionDef() : Stmt(ASTNodeType::FunctionDef), name(), args(nullptr) {}
     
     /**
-     * @brief 获取节点的字符串表示
+     * @brief 获取节点的字符串表示（单行格式）
      * @return 格式化的字符串
      */
     std::string toString() const override;
+    
+    /**
+     * @brief 获取节点的字符串表示（带缩进格式）
+     * @param indent 缩进级别
+     * @return 格式化的字符串
+     */
+    std::string toString(int indent) const override;
 };
 
 /**
@@ -1854,10 +2058,17 @@ public:
     AsyncFunctionDef() : FunctionDef() { type = ASTNodeType::AsyncFunctionDef; }
     
     /**
-     * @brief 获取节点的字符串表示
+     * @brief 获取节点的字符串表示（单行格式）
      * @return 格式化的字符串
      */
     std::string toString() const override;
+    
+    /**
+     * @brief 获取节点的字符串表示（带缩进格式）
+     * @param indent 缩进级别
+     * @return 格式化的字符串
+     */
+    std::string toString(int indent) const override;
 };
 
 // ============================================================================
@@ -1896,10 +2107,17 @@ public:
     ClassDef() : Stmt(ASTNodeType::ClassDef), name(), bases(nullptr) {}
     
     /**
-     * @brief 获取节点的字符串表示
+     * @brief 获取节点的字符串表示（单行格式）
      * @return 格式化的字符串
      */
     std::string toString() const override;
+    
+    /**
+     * @brief 获取节点的字符串表示（带缩进格式）
+     * @param indent 缩进级别
+     * @return 格式化的字符串
+     */
+    std::string toString(int indent) const override;
 };
 
 // ============================================================================
@@ -1942,10 +2160,17 @@ public:
     Return(std::unique_ptr<Expr> val) : Stmt(ASTNodeType::Return), value(std::move(val)) {}
     
     /**
-     * @brief 获取节点的字符串表示
+     * @brief 获取节点的字符串表示（单行格式）
      * @return 格式化的字符串
      */
     std::string toString() const override;
+    
+    /**
+     * @brief 获取节点的字符串表示（带缩进格式）
+     * @param indent 缩进级别
+     * @return 格式化的字符串
+     */
+    std::string toString(int indent) const override;
 };
 
 /**
@@ -1979,10 +2204,17 @@ public:
     Delete() : Stmt(ASTNodeType::Delete) {}
     
     /**
-     * @brief 获取节点的字符串表示
+     * @brief 获取节点的字符串表示（单行格式）
      * @return 格式化的字符串
      */
     std::string toString() const override;
+    
+    /**
+     * @brief 获取节点的字符串表示（带缩进格式）
+     * @param indent 缩进级别
+     * @return 格式化的字符串
+     */
+    std::string toString(int indent) const override;
 };
 
 // ============================================================================
@@ -2022,10 +2254,17 @@ public:
     Assign() : Stmt(ASTNodeType::Assign), value(nullptr) {}
     
     /**
-     * @brief 获取节点的字符串表示
+     * @brief 获取节点的字符串表示（单行格式）
      * @return 格式化的字符串
      */
     std::string toString() const override;
+    
+    /**
+     * @brief 获取节点的字符串表示（带缩进格式）
+     * @param indent 缩进级别
+     * @return 格式化的字符串
+     */
+    std::string toString(int indent) const override;
 };
 
 /**
@@ -2071,10 +2310,17 @@ public:
     AugAssign() : Stmt(ASTNodeType::AugAssign), target(nullptr), op(ASTNodeType::Add), value(nullptr) {}
     
     /**
-     * @brief 获取节点的字符串表示
+     * @brief 获取节点的字符串表示（单行格式）
      * @return 格式化的字符串
      */
     std::string toString() const override;
+    
+    /**
+     * @brief 获取节点的字符串表示（带缩进格式）
+     * @param indent 缩进级别
+     * @return 格式化的字符串
+     */
+    std::string toString(int indent) const override;
 };
 
 /**
@@ -2114,10 +2360,17 @@ public:
                   annotation(nullptr), value(nullptr), simple(true) {}
     
     /**
-     * @brief 获取节点的字符串表示
+     * @brief 获取节点的字符串表示（单行格式）
      * @return 格式化的字符串
      */
     std::string toString() const override;
+    
+    /**
+     * @brief 获取节点的字符串表示（带缩进格式）
+     * @param indent 缩进级别
+     * @return 格式化的字符串
+     */
+    std::string toString(int indent) const override;
 };
 
 // ============================================================================
@@ -2164,10 +2417,17 @@ public:
     For() : Stmt(ASTNodeType::For), target(nullptr), iter(nullptr) {}
     
     /**
-     * @brief 获取节点的字符串表示
+     * @brief 获取节点的字符串表示（单行格式）
      * @return 格式化的字符串
      */
     std::string toString() const override;
+    
+    /**
+     * @brief 获取节点的字符串表示（带缩进格式）
+     * @param indent 缩进级别
+     * @return 格式化的字符串
+     */
+    std::string toString(int indent) const override;
 };
 
 /**
@@ -2196,10 +2456,17 @@ public:
     AsyncFor() { type = ASTNodeType::AsyncFor; }
     
     /**
-     * @brief 获取节点的字符串表示
+     * @brief 获取节点的字符串表示（单行格式）
      * @return 格式化的字符串
      */
     std::string toString() const override;
+    
+    /**
+     * @brief 获取节点的字符串表示（带缩进格式）
+     * @param indent 缩进级别
+     * @return 格式化的字符串
+     */
+    std::string toString(int indent) const override;
 };
 
 /**
@@ -2234,10 +2501,17 @@ public:
     While() : Stmt(ASTNodeType::While), test(nullptr) {}
     
     /**
-     * @brief 获取节点的字符串表示
+     * @brief 获取节点的字符串表示（单行格式）
      * @return 格式化的字符串
      */
     std::string toString() const override;
+    
+    /**
+     * @brief 获取节点的字符串表示（带缩进格式）
+     * @param indent 缩进级别
+     * @return 格式化的字符串
+     */
+    std::string toString(int indent) const override;
 };
 
 /**
@@ -2276,10 +2550,17 @@ public:
     If() : Stmt(ASTNodeType::If), test(nullptr) {}
     
     /**
-     * @brief 获取节点的字符串表示
+     * @brief 获取节点的字符串表示（单行格式）
      * @return 格式化的字符串
      */
     std::string toString() const override;
+    
+    /**
+     * @brief 获取节点的字符串表示（带缩进格式）
+     * @param indent 缩进级别
+     * @return 格式化的字符串
+     */
+    std::string toString(int indent) const override;
 };
 
 // ============================================================================
@@ -2315,10 +2596,17 @@ public:
     With() : Stmt(ASTNodeType::With) {}
     
     /**
-     * @brief 获取节点的字符串表示
+     * @brief 获取节点的字符串表示（单行格式）
      * @return 格式化的字符串
      */
     std::string toString() const override;
+    
+    /**
+     * @brief 获取节点的字符串表示（带缩进格式）
+     * @param indent 缩进级别
+     * @return 格式化的字符串
+     */
+    std::string toString(int indent) const override;
 };
 
 /**
@@ -2345,10 +2633,17 @@ public:
     AsyncWith() { type = ASTNodeType::AsyncWith; }
     
     /**
-     * @brief 获取节点的字符串表示
+     * @brief 获取节点的字符串表示（单行格式）
      * @return 格式化的字符串
      */
     std::string toString() const override;
+    
+    /**
+     * @brief 获取节点的字符串表示（带缩进格式）
+     * @param indent 缩进级别
+     * @return 格式化的字符串
+     */
+    std::string toString(int indent) const override;
 };
 
 // ============================================================================
@@ -2388,10 +2683,17 @@ public:
     Raise() : Stmt(ASTNodeType::Raise), exc(nullptr), cause(nullptr) {}
     
     /**
-     * @brief 获取节点的字符串表示
+     * @brief 获取节点的字符串表示（单行格式）
      * @return 格式化的字符串
      */
     std::string toString() const override;
+    
+    /**
+     * @brief 获取节点的字符串表示（带缩进格式）
+     * @param indent 缩进级别
+     * @return 格式化的字符串
+     */
+    std::string toString(int indent) const override;
 };
 
 /**
@@ -2431,10 +2733,17 @@ public:
     Try() : Stmt(ASTNodeType::Try) {}
     
     /**
-     * @brief 获取节点的字符串表示
+     * @brief 获取节点的字符串表示（单行格式）
      * @return 格式化的字符串
      */
     std::string toString() const override;
+    
+    /**
+     * @brief 获取节点的字符串表示（带缩进格式）
+     * @param indent 缩进级别
+     * @return 格式化的字符串
+     */
+    std::string toString(int indent) const override;
 };
 
 /**
@@ -2473,10 +2782,17 @@ public:
     Assert() : Stmt(ASTNodeType::Assert), test(nullptr), msg(nullptr) {}
     
     /**
-     * @brief 获取节点的字符串表示
+     * @brief 获取节点的字符串表示（单行格式）
      * @return 格式化的字符串
      */
     std::string toString() const override;
+    
+    /**
+     * @brief 获取节点的字符串表示（带缩进格式）
+     * @param indent 缩进级别
+     * @return 格式化的字符串
+     */
+    std::string toString(int indent) const override;
 };
 
 // ============================================================================
@@ -2509,10 +2825,17 @@ public:
     Global() : Stmt(ASTNodeType::Global) {}
     
     /**
-     * @brief 获取节点的字符串表示
+     * @brief 获取节点的字符串表示（单行格式）
      * @return 格式化的字符串
      */
     std::string toString() const override;
+    
+    /**
+     * @brief 获取节点的字符串表示（带缩进格式）
+     * @param indent 缩进级别
+     * @return 格式化的字符串
+     */
+    std::string toString(int indent) const override;
 };
 
 /**
@@ -2541,10 +2864,17 @@ public:
     Nonlocal() : Stmt(ASTNodeType::Nonlocal) {}
     
     /**
-     * @brief 获取节点的字符串表示
+     * @brief 获取节点的字符串表示（单行格式）
      * @return 格式化的字符串
      */
     std::string toString() const override;
+    
+    /**
+     * @brief 获取节点的字符串表示（带缩进格式）
+     * @param indent 缩进级别
+     * @return 格式化的字符串
+     */
+    std::string toString(int indent) const override;
 };
 
 /**
@@ -2573,10 +2903,17 @@ public:
         : Expr(ASTNodeType::Alias), asname(alias), name(std::move(original)) {}
     
     /**
-     * @brief 获取节点的字符串表示
+     * @brief 获取节点的字符串表示（单行格式）
      * @return 格式化的字符串
      */
     std::string toString() const override;
+    
+    /**
+     * @brief 获取节点的字符串表示（带缩进格式）
+     * @param indent 缩进级别
+     * @return 格式化的字符串
+     */
+    std::string toString(int indent) const override;
 };
 // ============================================================================
 // 导入语句
@@ -2617,10 +2954,17 @@ public:
     Import() : Stmt(ASTNodeType::Import) {}
     
     /**
-     * @brief 获取节点的字符串表示
+     * @brief 获取节点的字符串表示（单行格式）
      * @return 格式化的字符串
      */
     std::string toString() const override;
+    
+    /**
+     * @brief 获取节点的字符串表示（带缩进格式）
+     * @param indent 缩进级别
+     * @return 格式化的字符串
+     */
+    std::string toString(int indent) const override;
 };
 
 /**
@@ -2665,10 +3009,17 @@ public:
     ImportFrom() : Stmt(ASTNodeType::ImportFrom), level(0) {}
     
     /**
-     * @brief 获取节点的字符串表示
+     * @brief 获取节点的字符串表示（单行格式）
      * @return 格式化的字符串
      */
     std::string toString() const override;
+    
+    /**
+     * @brief 获取节点的字符串表示（带缩进格式）
+     * @param indent 缩进级别
+     * @return 格式化的字符串
+     */
+    std::string toString(int indent) const override;
 };
 
 // ============================================================================
@@ -2708,10 +3059,17 @@ public:
     ExprStmt(std::unique_ptr<Expr> val) : Stmt(ASTNodeType::ExprStmt), value(std::move(val)) {}
     
     /**
-     * @brief 获取节点的字符串表示
+     * @brief 获取节点的字符串表示（单行格式）
      * @return 格式化的字符串
      */
     std::string toString() const override;
+    
+    /**
+     * @brief 获取节点的字符串表示（带缩进格式）
+     * @param indent 缩进级别
+     * @return 格式化的字符串
+     */
+    std::string toString(int indent) const override;
 };
 
 /**
@@ -2738,10 +3096,17 @@ public:
     Pass() : Stmt(ASTNodeType::Pass) {}
     
     /**
-     * @brief 获取节点的字符串表示
+     * @brief 获取节点的字符串表示（单行格式）
      * @return 格式化的字符串
      */
     std::string toString() const override;
+    
+    /**
+     * @brief 获取节点的字符串表示（带缩进格式）
+     * @param indent 缩进级别
+     * @return 格式化的字符串
+     */
+    std::string toString(int indent) const override;
 };
 
 /**
@@ -2769,10 +3134,17 @@ public:
     Break() : Stmt(ASTNodeType::Break) {}
     
     /**
-     * @brief 获取节点的字符串表示
+     * @brief 获取节点的字符串表示（单行格式）
      * @return 格式化的字符串
      */
     std::string toString() const override;
+    
+    /**
+     * @brief 获取节点的字符串表示（带缩进格式）
+     * @param indent 缩进级别
+     * @return 格式化的字符串
+     */
+    std::string toString(int indent) const override;
 };
 
 /**
@@ -2801,10 +3173,17 @@ public:
     Continue() : Stmt(ASTNodeType::Continue) {}
     
     /**
-     * @brief 获取节点的字符串表示
+     * @brief 获取节点的字符串表示（单行格式）
      * @return 格式化的字符串
      */
     std::string toString() const override;
+    
+    /**
+     * @brief 获取节点的字符串表示（带缩进格式）
+     * @param indent 缩进级别
+     * @return 格式化的字符串
+     */
+    std::string toString(int indent) const override;
 };
 
 // ============================================================================
@@ -2841,10 +3220,17 @@ public:
     arguments() : ASTNode(ASTNodeType::arguments) {}
     
     /**
-     * @brief 获取节点的字符串表示
+     * @brief 获取节点的字符串表示（单行格式）
      * @return 格式化的字符串
      */
     std::string toString() const override;
+    
+    /**
+     * @brief 获取节点的字符串表示（带缩进格式）
+     * @param indent 缩进级别
+     * @return 格式化的字符串
+     */
+    std::string toString(int indent) const override;
 };
 
 /**
@@ -2879,10 +3265,17 @@ public:
     arg(const std::string& arg) : ASTNode(ASTNodeType::arg), name(arg) {}
     
     /**
-     * @brief 获取节点的字符串表示
+     * @brief 获取节点的字符串表示（单行格式）
      * @return 格式化的字符串
      */
     std::string toString() const override;
+    
+    /**
+     * @brief 获取节点的字符串表示（带缩进格式）
+     * @param indent 缩进级别
+     * @return 格式化的字符串
+     */
+    std::string toString(int indent) const override;
 };
 
 /**
@@ -2914,10 +3307,17 @@ public:
     except_handler() : ASTNode(ASTNodeType::except_handler), type(nullptr) {}
     
     /**
-     * @brief 获取节点的字符串表示
+     * @brief 获取节点的字符串表示（单行格式）
      * @return 格式化的字符串
      */
     std::string toString() const override;
+    
+    /**
+     * @brief 获取节点的字符串表示（带缩进格式）
+     * @param indent 缩进级别
+     * @return 格式化的字符串
+     */
+    std::string toString(int indent) const override;
 };
 
 /**
@@ -2947,10 +3347,17 @@ public:
     withitem() : ASTNode(ASTNodeType::withitem), context_expr(nullptr) {}
     
     /**
-     * @brief 获取节点的字符串表示
+     * @brief 获取节点的字符串表示（单行格式）
      * @return 格式化的字符串
      */
     std::string toString() const override;
+    
+    /**
+     * @brief 获取节点的字符串表示（带缩进格式）
+     * @param indent 缩进级别
+     * @return 格式化的字符串
+     */
+    std::string toString(int indent) const override;
 };
 
 /**
@@ -2983,10 +3390,17 @@ public:
                       target(nullptr), iter(nullptr), is_async(false) {}
     
     /**
-     * @brief 获取节点的字符串表示
+     * @brief 获取节点的字符串表示（单行格式）
      * @return 格式化的字符串
      */
     std::string toString() const override;
+    
+    /**
+     * @brief 获取节点的字符串表示（带缩进格式）
+     * @param indent 缩进级别
+     * @return 格式化的字符串
+     */
+    std::string toString(int indent) const override;
 };
 
 // ============================================================================
@@ -3023,10 +3437,17 @@ public:
     Module() : ASTNode(ASTNodeType::Module) {}
     
     /**
-     * @brief 获取节点的字符串表示
+     * @brief 获取节点的字符串表示（单行格式）
      * @return 格式化的字符串
      */
     std::string toString() const override;
+    
+    /**
+     * @brief 获取节点的字符串表示（带缩进格式）
+     * @param indent 缩进级别
+     * @return 格式化的字符串
+     */
+    std::string toString(int indent) const override;
 };
 
 }  // namespace csgo
