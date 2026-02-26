@@ -1652,6 +1652,13 @@ std::vector<Token> Tokenizer::tokenize() {
         if (token.type == TokenType::Error && hasError_) break;
     }
     
+    // ✅ 关键修复：处理文件结束时未闭合的缩进
+    // 如果最后一行有缩进但没有换行，需要生成 DEDENT
+    while (indentStack_.size() > 1) {
+        indentStack_.pop_back();
+        tokens.push_back(makeToken(TokenType::Dedent, pos_, 0));
+    }
+    
     if (tokens.empty() || tokens.back().type != TokenType::EndMarker) {
         tokens.push_back(makeToken(TokenType::EndMarker, pos_, 0));
     }
