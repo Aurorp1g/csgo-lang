@@ -297,6 +297,7 @@ std::unique_ptr<For> Parser::parseForStatement() {
     
     expect(TokenType::For);
     forNode->target = parseExpression();
+    setTargetContext(*forNode->target);
     expect(TokenType::In);
     
     // 将解析得到的测试列表转换为单个表达式
@@ -1023,6 +1024,10 @@ std::unique_ptr<Expr> Parser::parseComparison() {
     std::vector<ASTNodeType> ops;
     std::vector<std::unique_ptr<Expr>> comparators;
     
+    Position compPos;
+    if (isComparisonOperator(currentToken().type)) {
+        compPos = getPosition();
+    }
     auto compOps = parseComparisonOperator();
     while (!compOps.empty()) {
         auto op = compOps[0];
@@ -1032,11 +1037,15 @@ std::unique_ptr<Expr> Parser::parseComparison() {
         ops.push_back(op);
         comparators.push_back(std::move(right));
         
+        if (isComparisonOperator(currentToken().type)) {
+            compPos = getPosition();
+        }
         compOps = parseComparisonOperator();
     }
     
     if (!ops.empty()) {
         auto compare = std::make_unique<Compare>();
+        compare->position = compPos;
         compare->left = std::move(left);
         compare->ops = std::move(ops);
         compare->comparators = std::move(comparators);
@@ -1089,14 +1098,34 @@ std::vector<ASTNodeType> Parser::parseComparisonOperator() {
     return ops;
 }
 
+bool Parser::isComparisonOperator(TokenType type) {
+    switch (type) {
+        case TokenType::Less:
+        case TokenType::Greater:
+        case TokenType::EqEqual:
+        case TokenType::GreaterEqual:
+        case TokenType::LessEqual:
+        case TokenType::NotEqual:
+        case TokenType::In:
+        case TokenType::NotIn:
+        case TokenType::Is:
+        case TokenType::IsNot:
+            return true;
+        default:
+            return false;
+    }
+}
+
 std::unique_ptr<Expr> Parser::parseExpression() {
     auto left = parseXorExpr();
     
     while (check(TokenType::VBar)) {
+        Position opPos = getPosition();
         advance();
         auto right = parseXorExpr();
         
         auto binOp = std::make_unique<BinOp>();
+        binOp->position = opPos;
         binOp->op = ASTNodeType::BitOr;
         binOp->left = std::move(left);
         binOp->right = std::move(right);
@@ -1110,10 +1139,12 @@ std::unique_ptr<Expr> Parser::parseXorExpr() {
     auto left = parseAndExpr();
     
     while (check(TokenType::Circumflex)) {
+        Position opPos = getPosition();
         advance();
         auto right = parseAndExpr();
         
         auto binOp = std::make_unique<BinOp>();
+        binOp->position = opPos;
         binOp->op = ASTNodeType::BitXor;
         binOp->left = std::move(left);
         binOp->right = std::move(right);
@@ -1127,10 +1158,12 @@ std::unique_ptr<Expr> Parser::parseAndExpr() {
     auto left = parseShiftExpr();
     
     while (check(TokenType::Amper)) {
+        Position opPos = getPosition();
         advance();
         auto right = parseShiftExpr();
         
         auto binOp = std::make_unique<BinOp>();
+        binOp->position = opPos;
         binOp->op = ASTNodeType::BitAnd;
         binOp->left = std::move(left);
         binOp->right = std::move(right);
@@ -1144,11 +1177,13 @@ std::unique_ptr<Expr> Parser::parseShiftExpr() {
     auto left = parseArithmeticExpr();
     
     while (check(TokenType::LeftShift) || check(TokenType::RightShift)) {
+        Position opPos = getPosition();
         auto op = currentToken().type;
         advance();
         auto right = parseArithmeticExpr();
         
         auto binOp = std::make_unique<BinOp>();
+        binOp->position = opPos;
         binOp->op = tokenToASTBinOp(op);
         binOp->left = std::move(left);
         binOp->right = std::move(right);
@@ -1162,11 +1197,13 @@ std::unique_ptr<Expr> Parser::parseArithmeticExpr() {
     auto left = parseTerm();
     
     while (check(TokenType::Plus) || check(TokenType::Minus)) {
+        Position opPos = getPosition();
         auto op = currentToken().type;
         advance();
         auto right = parseTerm();
         
         auto binOp = std::make_unique<BinOp>();
+        binOp->position = opPos;
         binOp->op = tokenToASTBinOp(op);
         binOp->left = std::move(left);
         binOp->right = std::move(right);
@@ -1181,11 +1218,13 @@ std::unique_ptr<Expr> Parser::parseTerm() {
     
     while (check(TokenType::Star) || check(TokenType::Slash) || 
            check(TokenType::Percent) || check(TokenType::DoubleSlash)) {
+        Position opPos = getPosition();
         auto op = currentToken().type;
         advance();
         auto right = parseFactor();
         
         auto binOp = std::make_unique<BinOp>();
+        binOp->position = opPos;
         binOp->op = tokenToASTBinOp(op);
         binOp->left = std::move(left);
         binOp->right = std::move(right);
@@ -1214,10 +1253,12 @@ std::unique_ptr<Expr> Parser::parsePower() {
     auto atomExpr = parseAtomExpression();
     
     if (check(TokenType::DoubleStar)) {
+        Position opPos = getPosition();
         advance();
         auto operand = parseFactor();
         
         auto binOp = std::make_unique<BinOp>();
+        binOp->position = opPos;
         binOp->op = ASTNodeType::Pow;
         binOp->left = std::move(atomExpr);
         binOp->right = std::move(operand);

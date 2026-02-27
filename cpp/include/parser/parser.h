@@ -543,6 +543,13 @@ private:
     std::vector<ASTNodeType> parseComparisonOperator();
     
     /**
+     * @brief 判断是否为比较运算符
+     * @param type token 类型
+     * @return true 如果是比较运算符
+     */
+    bool isComparisonOperator(TokenType type);
+    
+    /**
      * @brief 解析位或表达式
      * @details 解析 expr 规则：
      * - expr: xor_expr ('|' xor_expr)*
