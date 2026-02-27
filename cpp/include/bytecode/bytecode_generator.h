@@ -267,54 +267,61 @@ struct StackEffectEntry {
 class Instruction {
 public:
     uint8_t opcode;           // 操作码
-    uint32_t oparg;          // 操作数（32位，支持扩展参数）
+    uint32_t oparg;          // 操作数（32位，目前支持16位，未支持扩展参数）
 
     Instruction() : opcode(0), oparg(0) {}
     Instruction(uint8_t op, uint32_t arg = 0) : opcode(op), oparg(arg) {}
 
     // 检查是否有参数
     bool has_arg() const {
-    // 二元运算指令 (24-33), 排除 22(BINARY_ADD) 和 23(BINARY_SUBTRACT)
-    if (opcode >= 24 && opcode <= 33) return true;
-        
-        // BINARY_OP 操作码 (107)
-        if (opcode == 107) return true;
-        
-        return opcode >= static_cast<uint8_t>(BytecodeOpcode::EXTENDED_ARG) ||
-               (opcode >= static_cast<uint8_t>(BytecodeOpcode::LOAD_FAST) && opcode <= static_cast<uint8_t>(BytecodeOpcode::LOAD_CLOSURE)) ||
-               (opcode >= static_cast<uint8_t>(BytecodeOpcode::STORE_FAST) && opcode <= static_cast<uint8_t>(BytecodeOpcode::DELETE_DEREF)) ||
-               opcode == static_cast<uint8_t>(BytecodeOpcode::COMPARE_OP) ||
-               opcode == static_cast<uint8_t>(BytecodeOpcode::BUILD_TUPLE) ||
-               opcode == static_cast<uint8_t>(BytecodeOpcode::BUILD_LIST) ||
-               opcode == static_cast<uint8_t>(BytecodeOpcode::BUILD_SET) ||
-               opcode == static_cast<uint8_t>(BytecodeOpcode::BUILD_MAP) ||
-               opcode == static_cast<uint8_t>(BytecodeOpcode::BUILD_STRING) ||
-               opcode == static_cast<uint8_t>(BytecodeOpcode::UNPACK_SEQUENCE) ||
-               opcode == static_cast<uint8_t>(BytecodeOpcode::BUILD_SLICE) ||
-               opcode == static_cast<uint8_t>(BytecodeOpcode::CALL_FUNCTION) ||
-               opcode == static_cast<uint8_t>(BytecodeOpcode::CALL_FUNCTION_KW) ||
-               opcode == static_cast<uint8_t>(BytecodeOpcode::CALL_FUNCTION_EX) ||
-               opcode == static_cast<uint8_t>(BytecodeOpcode::LOAD_ATTR) ||
-               opcode == static_cast<uint8_t>(BytecodeOpcode::STORE_ATTR) ||
-               opcode == static_cast<uint8_t>(BytecodeOpcode::DELETE_ATTR) ||
-               opcode == static_cast<uint8_t>(BytecodeOpcode::LOAD_GLOBAL) ||
-               opcode == static_cast<uint8_t>(BytecodeOpcode::STORE_GLOBAL) ||
-               opcode == static_cast<uint8_t>(BytecodeOpcode::DELETE_GLOBAL) ||
-               opcode == static_cast<uint8_t>(BytecodeOpcode::LOAD_NAME) ||
-               opcode == static_cast<uint8_t>(BytecodeOpcode::STORE_NAME) ||
-               opcode == static_cast<uint8_t>(BytecodeOpcode::DELETE_NAME) ||
-               opcode == static_cast<uint8_t>(BytecodeOpcode::RAISE_VARARGS) ||
-               opcode == static_cast<uint8_t>(BytecodeOpcode::SETUP_EXCEPT) ||
-               opcode == static_cast<uint8_t>(BytecodeOpcode::SETUP_FINALLY) ||
-               opcode == static_cast<uint8_t>(BytecodeOpcode::SETUP_WITH) ||
-               opcode == static_cast<uint8_t>(BytecodeOpcode::SETUP_CLEANUP) ||
-               opcode == static_cast<uint8_t>(BytecodeOpcode::MAKE_FUNCTION) ||
-               opcode == static_cast<uint8_t>(BytecodeOpcode::JUMP_ABSOLUTE) ||
-               opcode == static_cast<uint8_t>(BytecodeOpcode::JUMP_FORWARD) ||
-               opcode == static_cast<uint8_t>(BytecodeOpcode::POP_JUMP_IF_TRUE) ||
-               opcode == static_cast<uint8_t>(BytecodeOpcode::POP_JUMP_IF_FALSE) ||
-               opcode == static_cast<uint8_t>(BytecodeOpcode::JUMP_IF_TRUE_OR_POP) ||
-               opcode == static_cast<uint8_t>(BytecodeOpcode::JUMP_IF_FALSE_OR_POP);
+        return has_arg(opcode);  // 调用静态函数
+    }
+
+    // 静态版本：供全局使用
+    static bool has_arg(uint8_t op) {
+        switch (op) {
+            // 明确无参的操作码（0-21, 34-38, 46-56, 77, 79-80, 85, 92-94, 101）
+            case 0:   // NOP
+            case 22:  // BINARY_ADD
+            case 23:  // BINARY_SUBTRACT
+            case 24:  // BINARY_MULTIPLY
+            case 25:  // BINARY_TRUE_DIVIDE
+            case 26:  // BINARY_FLOOR_DIVIDE
+            case 27:  // BINARY_MODULO
+            case 28:  // BINARY_POWER
+            case 29:  // BINARY_LSHIFT
+            case 30:  // BINARY_RSHIFT
+            case 31:  // BINARY_AND
+            case 32:  // BINARY_OR
+            case 33:  // BINARY_XOR
+            case 34:  // BINARY_MATRIX_MULTIPLY
+            case 35:  // UNARY_POSITIVE
+            case 36:  // UNARY_NEGATIVE
+            case 37:  // UNARY_NOT
+            case 38:  // UNARY_INVERT
+            case 46:  // BREAK_LOOP
+            case 47:  // CONTINUE_LOOP
+            case 48:  // RETURN_VALUE
+            case 49:  // YIELD_VALUE
+            case 50:  // YIELD_FROM
+            case 51:  // POP_TOP
+            case 52:  // ROT_TWO
+            case 53:  // ROT_THREE
+            case 54:  // ROT_FOUR
+            case 55:  // DUP_TOP
+            case 56:  // DUP_TOP_TWO
+            case 77:  // GET_ITER
+            case 79:  // GET_YIELD_FROM_ITER
+            case 80:  // GET_AWAITABLE
+            case 85:  // END_ASYNC_FOR
+            case 92:  // END_FINALLY
+            case 93:  // POP_FINALLY
+            case 94:  // BEGIN_FINALLY
+            case 101: // IMPORT_STAR
+                return false;
+            default:
+                return true;
+        }
     }
 
     // 获取指令字节大小
@@ -404,6 +411,7 @@ public:
 
     // 序列化到字节向量
     std::vector<uint8_t> serialize() const;
+    void serialize_constant(std::vector<uint8_t>& data, const ir::Value& constant) const;
 
     // 字节大小
     size_t size() const {
@@ -485,6 +493,15 @@ public:
     void set_optimize_level(int level);
     void set_debug_mode(bool debug);
 
+    // 调试：获取 IR 到字节的映射
+    struct InstrMapping {
+        std::string ir_instr;           // IR 指令的字符串表示
+        uint16_t byte_offset;           // 字节码偏移
+        std::vector<uint8_t> bytes;      // 生成的字节
+        std::string bytecode_instr;      // 字节码指令字符串
+    };
+    const std::vector<InstrMapping>& get_instr_mappings() const { return instr_mappings_; }
+
 private:
     int optimize_level_ = 0;
     bool debug_mode_ = false;
@@ -500,29 +517,106 @@ private:
     uint16_t resolve_jump_target(ir::BasicBlock* target);
     uint16_t resolve_relative_jump(uint16_t current_offset, uint16_t target_offset);
 
+    // 调试：IR 到字节映射
+    std::vector<InstrMapping> instr_mappings_;
+
     // 栈深度计算
     int compute_stack_depth(ir::IRModule* module);
     int compute_instruction_stack_effect(const ir::Instruction& instr);
 
-    // 指令生成
+    size_t calc_instruction_size(const ir::Instruction& instr);
+    // 指令生成 - 加载/存储
     void generate_load_const(const ir::Instruction& instr, Chunk* chunk);
     void generate_load_fast(const ir::Instruction& instr, Chunk* chunk);
     void generate_load_global(const ir::Instruction& instr, Chunk* chunk);
+    void generate_load_name(const ir::Instruction& instr, Chunk* chunk);
     void generate_load_attr(const ir::Instruction& instr, Chunk* chunk);
+    void generate_load_subscript(const ir::Instruction& instr, Chunk* chunk);
+    void generate_load_closure(const ir::Instruction& instr, Chunk* chunk);
+    void generate_load_deref(const ir::Instruction& instr, Chunk* chunk);
     void generate_store_fast(const ir::Instruction& instr, Chunk* chunk);
+    void generate_store_global(const ir::Instruction& instr, Chunk* chunk);
+    void generate_store_name(const ir::Instruction& instr, Chunk* chunk);
     void generate_store_attr(const ir::Instruction& instr, Chunk* chunk);
+    void generate_store_subscript(const ir::Instruction& instr, Chunk* chunk);
+    void generate_store_deref(const ir::Instruction& instr, Chunk* chunk);
+    void generate_delete_fast(const ir::Instruction& instr, Chunk* chunk);
+    void generate_delete_global(const ir::Instruction& instr, Chunk* chunk);
+    void generate_delete_name(const ir::Instruction& instr, Chunk* chunk);
+    void generate_delete_attr(const ir::Instruction& instr, Chunk* chunk);
+    void generate_delete_subscript(const ir::Instruction& instr, Chunk* chunk);
+    void generate_delete_deref(const ir::Instruction& instr, Chunk* chunk);
+
+    // 指令生成 - 运算
     void generate_binary_op(const ir::Instruction& instr, Chunk* chunk);
     void generate_unary_op(const ir::Instruction& instr, Chunk* chunk);
     void generate_compare(const ir::Instruction& instr, Chunk* chunk);
+    void generate_logical_op(const ir::Instruction& instr, Chunk* chunk);
+
+    // 指令生成 - 控制流
     void generate_jump(const ir::Instruction& instr, Chunk* chunk);
-    void generate_call(const ir::Instruction& instr, Chunk* chunk);
+    void generate_cond_jump(const ir::Instruction& instr, Chunk* chunk);
     void generate_return(const ir::Instruction& instr, Chunk* chunk);
-    void generate_phi(const ir::Instruction& instr, Chunk* chunk);
+    void generate_break_loop(const ir::Instruction& instr, Chunk* chunk);
+    void generate_continue_loop(const ir::Instruction& instr, Chunk* chunk);
+
+    // 指令生成 - 函数调用
+    void generate_call(const ir::Instruction& instr, Chunk* chunk);
+    void generate_make_function(const ir::Instruction& instr, Chunk* chunk);
+    void generate_load_method(const ir::Instruction& instr, Chunk* chunk);
+    void generate_call_method(const ir::Instruction& instr, Chunk* chunk);
+
+    // 指令生成 - 构建复合对象
     void generate_build(const ir::Instruction& instr, Chunk* chunk);
-    void generate_subscript(const ir::Instruction& instr, Chunk* chunk);
+    void generate_build_slice(const ir::Instruction& instr, Chunk* chunk);
+    void generate_unpack(const ir::Instruction& instr, Chunk* chunk);
+
+    // 指令生成 - 迭代器
     void generate_get_iter(const ir::Instruction& instr, Chunk* chunk);
     void generate_for_iter(const ir::Instruction& instr, Chunk* chunk);
-    void generate_unpack(const ir::Instruction& instr, Chunk* chunk);
+    void generate_get_aiter(const ir::Instruction& instr, Chunk* chunk);
+    void generate_get_anext(const ir::Instruction& instr, Chunk* chunk);
+
+    // 指令生成 - SSA特有
+    void generate_phi(const ir::Instruction& instr, Chunk* chunk);
+    void generate_copy(const ir::Instruction& instr, Chunk* chunk);
+
+    // 指令生成 - 栈操作
+    void generate_pop_top(const ir::Instruction& instr, Chunk* chunk);
+    void generate_dup_top(const ir::Instruction& instr, Chunk* chunk);
+    void generate_rot_two(const ir::Instruction& instr, Chunk* chunk);
+    void generate_rot_three(const ir::Instruction& instr, Chunk* chunk);
+    void generate_rot_four(const ir::Instruction& instr, Chunk* chunk);
+    void generate_dup_top_two(const ir::Instruction& instr, Chunk* chunk);
+
+    // 指令生成 - 导入
+    void generate_import_name(const ir::Instruction& instr, Chunk* chunk);
+    void generate_import_from(const ir::Instruction& instr, Chunk* chunk);
+    void generate_import_star(const ir::Instruction& instr, Chunk* chunk);
+
+    // 指令生成 - 异步操作
+    void generate_get_awaitable(const ir::Instruction& instr, Chunk* chunk);
+    void generate_setup_async_with(const ir::Instruction& instr, Chunk* chunk);
+    void generate_before_async_with(const ir::Instruction& instr, Chunk* chunk);
+    void generate_end_async_for(const ir::Instruction& instr, Chunk* chunk);
+
+    // 指令生成 - 异常处理
+    void generate_raise(const ir::Instruction& instr, Chunk* chunk);
+    void generate_setup_except(const ir::Instruction& instr, Chunk* chunk);
+    void generate_setup_finally(const ir::Instruction& instr, Chunk* chunk);
+    void generate_setup_with(const ir::Instruction& instr, Chunk* chunk);
+    void generate_end_finally(const ir::Instruction& instr, Chunk* chunk);
+    void generate_pop_finally(const ir::Instruction& instr, Chunk* chunk);
+    void generate_begin_finally(const ir::Instruction& instr, Chunk* chunk);
+    void generate_call_finally(const ir::Instruction& instr, Chunk* chunk);
+
+    // 指令生成 - 生成器
+    void generate_yield_value(const ir::Instruction& instr, Chunk* chunk);
+    void generate_yield_from(const ir::Instruction& instr, Chunk* chunk);
+    void generate_send(const ir::Instruction& instr, Chunk* chunk);
+
+    // 指令生成 - 格式化
+    void generate_format_value(const ir::Instruction& instr, Chunk* chunk);
 
     // 辅助方法
     void init_opcode_map();
