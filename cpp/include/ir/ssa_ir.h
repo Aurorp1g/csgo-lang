@@ -140,7 +140,6 @@ enum class IROpcode {
     YIELD_FROM,    ///< 从另一个生成器生成
     GET_ITER,      ///< 获取迭代器
     FOR_ITER,      ///< 迭代器迭代
-    END_FOR,       ///< 结束 for 循环
     BREAK_LOOP,    ///< 跳出循环
     CONTINUE_LOOP, ///< 继续循环
 
@@ -340,6 +339,7 @@ public:
     static Value Float(double value);
     static Value String(const std::string& value);
     static Value Bytes(const std::vector<uint8_t>& value);
+    static Value Undefined();
 
     // 变量创建工厂方法
     static Value Variable(const std::string& name, size_t version = 0);
@@ -408,7 +408,7 @@ private:
 
     // 控制流相关
     BasicBlock* target_;               // 跳转目标（条件跳转）
-    std::unordered_map<BasicBlock*, Value> phi_operands_; // PHI节点的操作数
+    std::vector<std::pair<BasicBlock*, Value>> phi_operands_; // PHI节点的操作数（按插入顺序）
 
     // 元数据
     std::unordered_map<std::string, std::string> metadata_; // 指令元数据
@@ -467,8 +467,10 @@ public:
     // 控制流
     BasicBlock* target() const { return target_; }
     void set_target(BasicBlock* target) { target_ = target; }
-    const std::unordered_map<BasicBlock*, Value>& phi_operands() const { return phi_operands_; }
-    void add_phi_operand(BasicBlock* pred, const Value& value) { phi_operands_[pred] = value; }
+        const std::vector<std::pair<BasicBlock*, Value>>& phi_operands() const { return phi_operands_; }
+    void add_phi_operand(BasicBlock* pred, const Value& value) { 
+        phi_operands_.push_back({pred, value}); 
+    }
 
     // 注释和元数据
     void set_comment(const std::string& comment) { comment_ = comment; }
@@ -734,6 +736,7 @@ private:
     BasicBlock* exit_block_;                // 退出基本块
     std::vector<BasicBlock*> block_stack_;
     size_t temp_counter_ = 0;
+    size_t block_counter_ = 0;
 
     // 作用域管理
     struct Scope {
@@ -757,6 +760,9 @@ private:
     };
     std::vector<LoopContext> loop_stack_;
 
+    // 延迟添加的块（用于保证块顺序等于执行顺序）
+    std::vector<std::unique_ptr<BasicBlock>> pending_blocks_;
+
 public:
     explicit IRBuilder(const std::string& filename = "");
     ~IRBuilder() = default;
@@ -770,6 +776,7 @@ public:
 
     // 基本块操作
     BasicBlock* new_block(const std::string& label = "");
+    BasicBlock* new_block_delayed(const std::string& label = "");
     void append_block(BasicBlock* block);
     void finish_block();
 
@@ -839,6 +846,7 @@ public:
     // 指令生成 - 序列操作
     std::vector<Value> emit_unpack_sequence(const Value& sequence, size_t count);
     Value emit_get_iter(const Value& iterable);
+    Value emit_for_iter(BasicBlock* target);
 
     // 指令生成 - 属性操作
     Value emit_load_attr(const Value& object, const std::string& attr);
@@ -902,7 +910,10 @@ private:
     Value build_yield(const Yield& expr);
     Value build_await(const Await& expr);
     Value build_boolop(const BoolOp& expr);
-    Value build_slice(const Slice& expr);
+    // SSA 辅助方法（新增）
+    Value lookup_variable(const std::string& name);
+    void update_variable(const std::string& name, const Value& value);
+    std::set<std::string> collect_loop_variables(const While& while_stmt);
 };
 
 } // namespace ir

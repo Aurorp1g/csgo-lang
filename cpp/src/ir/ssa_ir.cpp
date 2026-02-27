@@ -115,6 +115,14 @@ Value Value::Bytes(const std::vector<uint8_t>& value) {
     return v;
 }
 
+Value Value::Undefined() {
+    Value v;
+    v.kind_ = Kind::Undefined;
+    v.data_ = nullptr;
+    v.name_ = "undefined";
+    return v;
+}
+
 Value Value::Variable(const std::string& name, size_t version) {
     Value v;
     v.kind_ = Kind::Variable;
@@ -405,6 +413,7 @@ bool Instruction::is_terminator() const {
         case IROpcode::YIELD_VALUE:
         case IROpcode::BREAK_LOOP:
         case IROpcode::CONTINUE_LOOP:
+        case IROpcode::FOR_ITER:
             return true;
         default:
             return false;
@@ -554,6 +563,9 @@ std::string Instruction::to_string() const {
     oss << "  ";
 
     switch (opcode_) {
+        // =========================================================================
+        // 加载/存储指令
+        // =========================================================================
         case IROpcode::LOAD_CONST:
             oss << "LOAD_CONST ";
             for (size_t i = 0; i < operands_.size(); ++i) {
@@ -563,21 +575,71 @@ std::string Instruction::to_string() const {
             break;
         case IROpcode::LOAD_FAST:
             oss << "LOAD_FAST ";
-            if (!operands_.empty()) {
-                oss << operands_[0].to_string();
-            } else if (has_result()) {
+            if (has_result() && result_.kind() != Value::Kind::Undefined) {
                 oss << result_.to_string();
+            } else if (!operands_.empty()) {
+                oss << operands_[0].to_string();
             }
             break;
         case IROpcode::STORE_FAST:
-            oss << "STORE_FAST " << (operands_.empty() ? "" : operands_[0].to_string());
-            break;
-        case IROpcode::BINARY_ADD:
-            oss << "BINARY_ADD ";
-            for (size_t i = 0; i < operands_.size(); ++i) {
-                if (i > 0) oss << ", ";
-                oss << operands_[i].to_string();
+            if (has_result() && result_.kind() != Value::Kind::Undefined) {
+                oss << "STORE_FAST " << result_.to_string();
+            } else if (!operands_.empty()) {
+                oss << "STORE_FAST " << operands_[0].to_string();
+            } else {
+                oss << "STORE_FAST";
             }
+            break;
+        case IROpcode::LOAD_GLOBAL:
+            oss << "LOAD_GLOBAL ";
+            if (has_result() && result_.kind() != Value::Kind::Undefined) {
+                oss << result_.to_string();
+            } else if (!operands_.empty()) {
+                oss << operands_[0].to_string();
+            }
+            break;
+        case IROpcode::STORE_GLOBAL:
+            oss << "STORE_GLOBAL ";
+            if (!operands_.empty()) {
+                oss << operands_[0].to_string();
+            }
+            break;
+        case IROpcode::LOAD_NAME:
+            oss << "LOAD_NAME ";
+            if (!operands_.empty()) {
+                oss << operands_[0].to_string();
+            }
+            break;
+        case IROpcode::STORE_NAME:
+            oss << "STORE_NAME ";
+            if (!operands_.empty()) {
+                oss << operands_[0].to_string();
+            }
+            break;
+        case IROpcode::DELETE_FAST:
+            oss << "DELETE_FAST ";
+            if (!operands_.empty()) {
+                oss << operands_[0].to_string();
+            }
+            break;
+        case IROpcode::DELETE_GLOBAL:
+            oss << "DELETE_GLOBAL ";
+            if (!operands_.empty()) {
+                oss << operands_[0].to_string();
+            }
+            break;
+        case IROpcode::DELETE_NAME:
+            oss << "DELETE_NAME ";
+            if (!operands_.empty()) {
+                oss << operands_[0].to_string();
+            }
+            break;
+
+        // =========================================================================
+        // 二元运算指令
+        // =========================================================================
+        case IROpcode::BINARY_ADD:
+            oss << "BINARY_ADD";
             break;
         case IROpcode::BINARY_SUBTRACT:
             oss << "BINARY_SUBTRACT";
@@ -585,36 +647,417 @@ std::string Instruction::to_string() const {
         case IROpcode::BINARY_MULTIPLY:
             oss << "BINARY_MULTIPLY";
             break;
-        case IROpcode::RETURN_VALUE:
-            oss << "RETURN_VALUE";
+        case IROpcode::BINARY_TRUE_DIVIDE:
+            oss << "BINARY_TRUE_DIVIDE";
             break;
+        case IROpcode::BINARY_FLOOR_DIVIDE:
+            oss << "BINARY_FLOOR_DIVIDE";
+            break;
+        case IROpcode::BINARY_MODULO:
+            oss << "BINARY_MODULO";
+            break;
+        case IROpcode::BINARY_POWER:
+            oss << "BINARY_POWER";
+            break;
+        case IROpcode::BINARY_LSHIFT:
+            oss << "BINARY_LSHIFT";
+            break;
+        case IROpcode::BINARY_RSHIFT:
+            oss << "BINARY_RSHIFT";
+            break;
+        case IROpcode::BINARY_AND:
+            oss << "BINARY_AND";
+            break;
+        case IROpcode::BINARY_OR:
+            oss << "BINARY_OR";
+            break;
+        case IROpcode::BINARY_XOR:
+            oss << "BINARY_XOR";
+            break;
+
+        // =========================================================================
+        // 一元运算指令
+        // =========================================================================
+        case IROpcode::UNARY_POSITIVE:
+            oss << "UNARY_POSITIVE";
+            break;
+        case IROpcode::UNARY_NEGATIVE:
+            oss << "UNARY_NEGATIVE";
+            break;
+        case IROpcode::UNARY_NOT:
+            oss << "UNARY_NOT";
+            break;
+        case IROpcode::UNARY_INVERT:
+            oss << "UNARY_INVERT";
+            break;
+
+        // =========================================================================
+        // 比较运算指令
+        // =========================================================================
+        case IROpcode::COMPARE_EQ:
+            oss << "COMPARE_EQ";
+            break;
+        case IROpcode::COMPARE_NE:
+            oss << "COMPARE_NE";
+            break;
+        case IROpcode::COMPARE_LT:
+            oss << "COMPARE_LT";
+            break;
+        case IROpcode::COMPARE_LE:
+            oss << "COMPARE_LE";
+            break;
+        case IROpcode::COMPARE_GT:
+            oss << "COMPARE_GT";
+            break;
+        case IROpcode::COMPARE_GE:
+            oss << "COMPARE_GE";
+            break;
+        case IROpcode::COMPARE_IS:
+            oss << "COMPARE_IS";
+            break;
+        case IROpcode::COMPARE_IS_NOT:
+            oss << "COMPARE_IS_NOT";
+            break;
+        case IROpcode::COMPARE_IN:
+            oss << "COMPARE_IN";
+            break;
+        case IROpcode::COMPARE_NOT_IN:
+            oss << "COMPARE_NOT_IN";
+            break;
+
+        // =========================================================================
+        // 逻辑运算指令
+        // =========================================================================
+        case IROpcode::LOGICAL_AND:
+            oss << "LOGICAL_AND";
+            break;
+        case IROpcode::LOGICAL_OR:
+            oss << "LOGICAL_OR";
+            break;
+
+        // =========================================================================
+        // 控制流指令
+        // =========================================================================
         case IROpcode::JUMP:
             oss << "JUMP ";
             if (target_) {
                 oss << target_->label();
             }
             break;
-        case IROpcode::JUMP_IF_FALSE:
-            oss << "JUMP_IF_FALSE ";
+        case IROpcode::JUMP_IF_TRUE:
+            oss << "POP_JUMP_IF_TRUE ";
             if (target_) {
                 oss << target_->label();
             }
             break;
-        case IROpcode::CALL_FUNCTION:
-            oss << "CALL_FUNCTION";
+        case IROpcode::JUMP_IF_FALSE:
+            oss << "POP_JUMP_IF_FALSE ";
+            if (target_) {
+                oss << target_->label();
+            }
             break;
+        case IROpcode::JUMP_IF_FALSE_OR_POP:
+            oss << "JUMP_IF_FALSE_OR_POP ";
+            if (target_) {
+                oss << target_->label();
+            }
+            break;
+        case IROpcode::JUMP_IF_TRUE_OR_POP:
+            oss << "JUMP_IF_TRUE_OR_POP ";
+            if (target_) {
+                oss << target_->label();
+            }
+            break;
+        case IROpcode::RETURN_VALUE:
+            oss << "RETURN_VALUE";
+            break;
+        case IROpcode::RAISE_VARARGS:
+            oss << "RAISE_VARARGS";
+            break;
+        case IROpcode::YIELD_VALUE:
+            oss << "YIELD_VALUE";
+            break;
+        case IROpcode::YIELD_FROM:
+            oss << "YIELD_FROM";
+            break;
+        case IROpcode::GET_ITER:
+            oss << "GET_ITER";
+            break;
+        case IROpcode::FOR_ITER:
+            oss << "FOR_ITER ";
+            if (target_) {
+                oss << target_->label();
+            }
+            break;
+        case IROpcode::BREAK_LOOP:
+            oss << "BREAK_LOOP";
+            break;
+        case IROpcode::CONTINUE_LOOP:
+            oss << "CONTINUE_LOOP ";
+            if (target_) {
+                oss << target_->label();
+            }
+            break;
+
+        // =========================================================================
+        // 函数调用指令
+        // =========================================================================
+        case IROpcode::CALL_FUNCTION:
+            oss << "CALL_FUNCTION ";
+            oss << (operands_.size() > 0 ? operands_.size() - 1 : 0);
+            break;
+        case IROpcode::CALL_FUNCTION_KW:
+            oss << "CALL_FUNCTION_KW";
+            break;
+        case IROpcode::CALL_FUNCTION_EX:
+            oss << "CALL_FUNCTION_EX";
+            break;
+        case IROpcode::CALL_METHOD:
+            oss << "CALL_METHOD";
+            break;
+        case IROpcode::MAKE_FUNCTION:
+            oss << "MAKE_FUNCTION";
+            break;
+        case IROpcode::LOAD_METHOD:
+            oss << "LOAD_METHOD";
+            break;
+
+        // =========================================================================
+        // 构建复合对象指令
+        // =========================================================================
         case IROpcode::BUILD_TUPLE:
             oss << "BUILD_TUPLE " << operand_count();
             break;
         case IROpcode::BUILD_LIST:
             oss << "BUILD_LIST " << operand_count();
             break;
-        case IROpcode::PHI:
-            oss << "PHI";
-            if (has_result()) {
-                oss << " " << result_.to_string();
+        case IROpcode::BUILD_SET:
+            oss << "BUILD_SET " << operand_count();
+            break;
+        case IROpcode::BUILD_MAP:
+            oss << "BUILD_MAP " << operand_count();
+            break;
+        case IROpcode::BUILD_STRING:
+            oss << "BUILD_STRING " << operand_count();
+            break;
+        case IROpcode::BUILD_TUPLE_UNPACK:
+            oss << "BUILD_TUPLE_UNPACK " << operand_count();
+            break;
+        case IROpcode::BUILD_LIST_UNPACK:
+            oss << "BUILD_LIST_UNPACK " << operand_count();
+            break;
+        case IROpcode::BUILD_SET_UNPACK:
+            oss << "BUILD_SET_UNPACK " << operand_count();
+            break;
+        case IROpcode::BUILD_MAP_UNPACK:
+            oss << "BUILD_MAP_UNPACK " << operand_count();
+            break;
+        case IROpcode::BUILD_CONST_KEY_MAP:
+            oss << "BUILD_CONST_KEY_MAP " << operand_count();
+            break;
+
+        // =========================================================================
+        // 序列操作指令
+        // =========================================================================
+        case IROpcode::UNPACK_SEQUENCE:
+            oss << "UNPACK_SEQUENCE " << operand_count();
+            break;
+        case IROpcode::GET_AITER:
+            oss << "GET_AITER";
+            break;
+        case IROpcode::GET_ANEXT:
+            oss << "GET_ANEXT";
+            break;
+        case IROpcode::GET_YIELD_FROM_ITER:
+            oss << "GET_YIELD_FROM_ITER";
+            break;
+
+        // =========================================================================
+        // 属性/下标操作指令
+        // =========================================================================
+        case IROpcode::LOAD_ATTR:
+            oss << "LOAD_ATTR ";
+            if (!operands_.empty()) {
+                oss << operands_[0].to_string();
             }
             break;
+        case IROpcode::STORE_ATTR:
+            oss << "STORE_ATTR ";
+            if (!operands_.empty()) {
+                oss << operands_[0].to_string();
+            }
+            break;
+        case IROpcode::DELETE_ATTR:
+            oss << "DELETE_ATTR ";
+            if (!operands_.empty()) {
+                oss << operands_[0].to_string();
+            }
+            break;
+        case IROpcode::LOAD_SUBSCR:
+            oss << "LOAD_SUBSCR";
+            break;
+        case IROpcode::STORE_SUBSCR:
+            oss << "STORE_SUBSCR";
+            break;
+        case IROpcode::DELETE_SUBSCR:
+            oss << "DELETE_SUBSCR";
+            break;
+        case IROpcode::BUILD_SLICE:
+            oss << "BUILD_SLICE " << operand_count();
+            break;
+
+        // =========================================================================
+        // 闭包和作用域指令
+        // =========================================================================
+        case IROpcode::LOAD_CLOSURE:
+            oss << "LOAD_CLOSURE ";
+            if (!operands_.empty()) {
+                oss << operands_[0].to_string();
+            }
+            break;
+        case IROpcode::LOAD_DEREF:
+            oss << "LOAD_DEREF ";
+            if (!operands_.empty()) {
+                oss << operands_[0].to_string();
+            }
+            break;
+        case IROpcode::STORE_DEREF:
+            oss << "STORE_DEREF ";
+            if (!operands_.empty()) {
+                oss << operands_[0].to_string();
+            }
+            break;
+        case IROpcode::DELETE_DEREF:
+            oss << "DELETE_DEREF ";
+            if (!operands_.empty()) {
+                oss << operands_[0].to_string();
+            }
+            break;
+        case IROpcode::LOAD_CLASSDEREF:
+            oss << "LOAD_CLASSDEREF ";
+            if (!operands_.empty()) {
+                oss << operands_[0].to_string();
+            }
+            break;
+
+        // =========================================================================
+        // 栈操作指令
+        // =========================================================================
+        case IROpcode::POP_TOP:
+            oss << "POP_TOP";
+            break;
+        case IROpcode::ROT_TWO:
+            oss << "ROT_TWO";
+            break;
+        case IROpcode::ROT_THREE:
+            oss << "ROT_THREE";
+            break;
+        case IROpcode::ROT_FOUR:
+            oss << "ROT_FOUR";
+            break;
+        case IROpcode::DUP_TOP:
+            oss << "DUP_TOP";
+            break;
+        case IROpcode::DUP_TOP_TWO:
+            oss << "DUP_TOP_TWO";
+            break;
+
+        // =========================================================================
+        // 异步操作指令
+        // =========================================================================
+        case IROpcode::GET_AWAITABLE:
+            oss << "GET_AWAITABLE";
+            break;
+        case IROpcode::SETUP_ASYNC_WITH:
+            oss << "SETUP_ASYNC_WITH";
+            break;
+        case IROpcode::BEGIN_FINALLY:
+            oss << "BEGIN_FINALLY";
+            break;
+        case IROpcode::END_ASYNC_FOR:
+            oss << "END_ASYNC_FOR";
+            break;
+        case IROpcode::BEFORE_ASYNC_WITH:
+            oss << "BEFORE_ASYNC_WITH";
+            break;
+        case IROpcode::CALL_FINALLY:
+            oss << "CALL_FINALLY";
+            break;
+
+        // =========================================================================
+        // 异常处理指令
+        // =========================================================================
+        case IROpcode::SETUP_EXCEPT:
+            oss << "SETUP_EXCEPT";
+            break;
+        case IROpcode::SETUP_FINALLY:
+            oss << "SETUP_FINALLY";
+            break;
+        case IROpcode::SETUP_WITH:
+            oss << "SETUP_WITH";
+            break;
+        case IROpcode::END_FINALLY:
+            oss << "END_FINALLY";
+            break;
+        case IROpcode::POP_FINALLY:
+            oss << "POP_FINALLY";
+            break;
+
+        // =========================================================================
+        // 格式化指令
+        // =========================================================================
+        case IROpcode::FORMAT_VALUE:
+            oss << "FORMAT_VALUE";
+            break;
+
+        // =========================================================================
+        // 导入指令
+        // =========================================================================
+        case IROpcode::IMPORT_NAME:
+            oss << "IMPORT_NAME ";
+            if (!operands_.empty()) {
+                oss << operands_[0].to_string();
+            }
+            break;
+        case IROpcode::IMPORT_FROM:
+            oss << "IMPORT_FROM ";
+            if (!operands_.empty()) {
+                oss << operands_[0].to_string();
+            }
+            break;
+        case IROpcode::IMPORT_STAR:
+            oss << "IMPORT_STAR";
+            break;
+
+        // =========================================================================
+        // SSA 特有指令
+        // =========================================================================
+        case IROpcode::PHI:
+            if (has_result()) {
+                oss << result_.to_string() << " = ";
+            }
+            oss << "PHI";
+            if (!phi_operands_.empty()) {
+                oss << "(";
+                for (size_t i = 0; i < phi_operands_.size(); ++i) {
+                    if (i > 0) oss << ", ";
+                    const auto& [block, value] = phi_operands_[i];
+                    oss << value.to_string() << " from " 
+                        << (block ? block->label() : "null");
+                }
+                oss << ")";
+            }
+            break;
+        case IROpcode::COPY:
+            oss << "COPY ";
+            if (!operands_.empty()) {
+                oss << operands_[0].to_string();
+            }
+            if (has_result()) {
+                oss << " -> " << result_.to_string();
+            }
+            break;
+
         default:
             oss << "OP_" << static_cast<int>(opcode_);
             break;
@@ -993,11 +1436,41 @@ void IRBuilder::set_current_block(BasicBlock* block) {
 }
 
 BasicBlock* IRBuilder::new_block(const std::string& label) {
-    return module_->create_block(label);
+    std::string block_label = label;
+    if (!block_label.empty()) {
+        block_label = label + "_" + std::to_string(block_counter_++);
+    }
+    return module_->create_block(block_label);
+}
+
+BasicBlock* IRBuilder::new_block_delayed(const std::string& label) {
+    std::string block_label = label;
+    if (block_label.empty()) {
+        block_label = "block_" + std::to_string(module_->blocks().size() + pending_blocks_.size());
+    } else {
+        block_label = label + "_" + std::to_string(block_counter_++);
+    }
+    auto block = std::make_unique<BasicBlock>(block_label);
+    BasicBlock* ptr = block.get();
+    pending_blocks_.push_back(std::move(block));
+    return ptr;
 }
 
 void IRBuilder::append_block(BasicBlock* block) {
     if (!block) return;
+
+    // 检查是否是延迟添加的块，如果是则先添加到模块
+    bool found_in_pending = false;
+    for (auto it = pending_blocks_.begin(); it != pending_blocks_.end(); ++it) {
+        if (it->get() == block) {
+            // 移动到模块中
+            std::unique_ptr<BasicBlock> block_ptr = std::move(*it);
+            pending_blocks_.erase(it);
+            module_->add_block(std::move(block_ptr));
+            found_in_pending = true;
+            break;
+        }
+    }
 
     if (current_block_) {
         Instruction* last = current_block_->last_instruction();
@@ -1085,30 +1558,21 @@ Value IRBuilder::emit_load_const(const Value& constant) {
 }
 
 Value IRBuilder::emit_load_fast(const std::string& name) {
-    if (scope_stack_.empty()) {
-        throw std::runtime_error("No active scope");
-    }
-    auto& scope = scope_stack_.back();
+    // 查找当前版本（不创建新版本）
+    Value current = lookup_variable(name);
     
-    // 始终生成 LOAD_FAST 指令，但版本号保持当前值
-    size_t version = 0;
-    auto it = scope.locals_.find(name);
-    if (it != scope.locals_.end()) {
-        // 变量已存在，使用当前版本号
-        version = it->second.ssa_version();
-    } else {
-        // 新变量，创建第一个版本
-        version = module_->get_next_ssa_version(name);
+    if (current.is_undefined()) {
+        // 未定义，创建第一个版本
+        size_t version = module_->get_next_ssa_version(name);
+        current = Value::Variable(name, version);
+        update_variable(name, current);
     }
     
-    // 使用当前版本号，不要增加
-    Value var = Value::Variable(name, version);
-    // 不要更新 scope.locals_，保持原来的版本号
-    
-    auto instr = std::make_unique<Instruction>(IROpcode::LOAD_FAST, var);
-    instr->add_operand(var);
+    // 生成 LOAD_FAST 指令
+    auto instr = std::make_unique<Instruction>(IROpcode::LOAD_FAST, current);
     current_block_->append_instruction(std::move(instr));
-    return var;
+    
+    return current;
 }
 
 Value IRBuilder::emit_store_fast(const std::string& name, const Value& value) {
@@ -1120,7 +1584,7 @@ Value IRBuilder::emit_store_fast(const std::string& name, const Value& value) {
     Value var = Value::Variable(name, version);
     scope.locals_[name] = var;
     auto instr = std::make_unique<Instruction>(IROpcode::STORE_FAST, var);
-    instr->add_operand(value);
+    instr->add_operand(var);
     current_block_->append_instruction(std::move(instr));
     return var;
 }
@@ -1159,8 +1623,7 @@ Value IRBuilder::emit_binary_op(IROpcode op) {
 }
 
 Value IRBuilder::emit_binary_add(const Value& left, const Value& right) {
-    static size_t temp_counter = 0;
-    Value result = Value::Temporary(temp_counter++);
+    Value result = Value::Temporary(temp_counter_++);
     auto instr = std::make_unique<Instruction>(IROpcode::BINARY_ADD, result);
     instr->add_operand(left);
     instr->add_operand(right);
@@ -1273,8 +1736,7 @@ Value IRBuilder::emit_compare(CompareOp op) {
     }
     Value right = pop_value();
     Value left = pop_value();
-    static size_t temp_counter = 0;
-    Value result = Value::Temporary(temp_counter++);
+    Value result = Value::Temporary(temp_counter_++);
     auto instr = std::make_unique<Instruction>(IROpcode::COMPARE_EQ, result);
     instr->add_operand(left);
     instr->add_operand(right);
@@ -1284,8 +1746,7 @@ Value IRBuilder::emit_compare(CompareOp op) {
 }
 
 Value IRBuilder::emit_compare_eq(const Value& left, const Value& right) {
-    static size_t temp_counter = 0;
-    Value result = Value::Temporary(temp_counter++);
+    Value result = Value::Temporary(temp_counter_++);
     auto instr = std::make_unique<Instruction>(IROpcode::COMPARE_EQ, result);
     instr->add_operand(left);
     instr->add_operand(right);
@@ -1294,8 +1755,7 @@ Value IRBuilder::emit_compare_eq(const Value& left, const Value& right) {
 }
 
 Value IRBuilder::emit_compare_ne(const Value& left, const Value& right) {
-    static size_t temp_counter = 0;
-    Value result = Value::Temporary(temp_counter++);
+    Value result = Value::Temporary(temp_counter_++);
     auto instr = std::make_unique<Instruction>(IROpcode::COMPARE_NE, result);
     instr->add_operand(left);
     instr->add_operand(right);
@@ -1304,8 +1764,7 @@ Value IRBuilder::emit_compare_ne(const Value& left, const Value& right) {
 }
 
 Value IRBuilder::emit_compare_lt(const Value& left, const Value& right) {
-    static size_t temp_counter = 0;
-    Value result = Value::Temporary(temp_counter++);
+    Value result = Value::Temporary(temp_counter_++);
     auto instr = std::make_unique<Instruction>(IROpcode::COMPARE_LT, result);
     instr->add_operand(left);
     instr->add_operand(right);
@@ -1325,8 +1784,7 @@ Value IRBuilder::emit_phi(const std::string& name,
 }
 
 Value IRBuilder::emit_compare_le(const Value& left, const Value& right) {
-    static size_t temp_counter = 0;
-    Value result = Value::Temporary(temp_counter++);
+    Value result = Value::Temporary(temp_counter_++);
     auto instr = std::make_unique<Instruction>(IROpcode::COMPARE_LE, result);
     instr->add_operand(left);
     instr->add_operand(right);
@@ -1335,8 +1793,7 @@ Value IRBuilder::emit_compare_le(const Value& left, const Value& right) {
 }
 
 Value IRBuilder::emit_compare_gt(const Value& left, const Value& right) {
-    static size_t temp_counter = 0;
-    Value result = Value::Temporary(temp_counter++);
+    Value result = Value::Temporary(temp_counter_++);
     auto instr = std::make_unique<Instruction>(IROpcode::COMPARE_GT, result);
     instr->add_operand(left);
     instr->add_operand(right);
@@ -1345,8 +1802,7 @@ Value IRBuilder::emit_compare_gt(const Value& left, const Value& right) {
 }
 
 Value IRBuilder::emit_compare_ge(const Value& left, const Value& right) {
-    static size_t temp_counter = 0;
-    Value result = Value::Temporary(temp_counter++);
+    Value result = Value::Temporary(temp_counter_++);
     auto instr = std::make_unique<Instruction>(IROpcode::COMPARE_GE, result);
     instr->add_operand(left);
     instr->add_operand(right);
@@ -1498,10 +1954,20 @@ std::vector<Value> IRBuilder::emit_unpack_sequence(const Value& sequence, size_t
 }
 
 Value IRBuilder::emit_get_iter(const Value& iterable) {
-    Value result = module_->create_ssa_version("iter");
+    Value result = Value::Temporary(temp_counter_++);
     auto instr = std::make_unique<Instruction>(IROpcode::GET_ITER, result);
     instr->add_operand(iterable);
     current_block_->append_instruction(std::move(instr));
+    return result;
+}
+
+Value IRBuilder::emit_for_iter(BasicBlock* target) {
+    Value result = Value::Temporary(temp_counter_++);
+    auto instr = std::make_unique<Instruction>(IROpcode::FOR_ITER, result);
+    instr->set_target(target);
+    current_block_->append_instruction(std::move(instr));
+    current_block_->add_successor(target);
+    target->add_predecessor(current_block_);
     return result;
 }
 
@@ -1692,17 +2158,23 @@ BasicBlock* IRBuilder::get_jump_target(size_t index) {
 std::unique_ptr<IRModule> IRBuilder::build() {
     // 先完成当前块
     finish_block();
-    
+
+    // 处理所有剩余的延迟块（添加到模块末尾）
+    for (auto& block : pending_blocks_) {
+        module_->add_block(std::move(block));
+    }
+    pending_blocks_.clear();
+
     // 确保所有块都有 terminator，特别是空块
     for (auto& block : module_->blocks()) {
-        if (block->instructions().empty() || 
+        if (block->instructions().empty() ||
             !block->last_instruction()->is_terminator()) {
             block->append_instruction(
                 std::make_unique<Instruction>(IROpcode::RETURN_VALUE));
             block->last_instruction()->add_operand(Value::None());
         }
     }
-    
+
     return std::move(module_);
 }
 
@@ -1752,30 +2224,32 @@ void IRBuilder::build_if(const If& if_stmt) {
 
     BasicBlock* then_block = new_block("if_then");
     BasicBlock* else_block = if_stmt.orelse.empty() ? nullptr : new_block("if_else");
-    BasicBlock* merge_block = new_block("if_merge");
+    // merge_block 使用延迟添加，保证它在 then 和 else 分支之后
+    BasicBlock* merge_block = new_block_delayed("if_merge");
 
-    // 正确的控制流：
-    // - 条件为真 → 执行 if 分支 (then_block)
-    // - 条件为假 → 执行 else 分支 (else_block)
-    // POP_JUMP_IF_FALSE 条件为假时跳转，所以跳转到 else 分支
+    // 明确添加所有后继关系
     if (else_block) {
+        // 条件为假时跳转到 else，为真时 fall through 到 then
         emit_jump_if_false(condition, else_block);
+        // 显式添加 then_block 为 fall-through 后继
+        current_block_->add_successor(then_block);
+        // else_block 也是后继（通过跳转）
+        current_block_->add_successor(else_block);
     } else {
-        // 如果没有 else 分支，条件为假时直接跳到 merge
+        // 没有 else 分支：条件为假时跳到 merge，为真时 fall through 到 then
         emit_jump_if_false(condition, merge_block);
+        current_block_->add_successor(then_block);  // fall-through
+        current_block_->add_successor(merge_block); // 跳转目标
     }
-    
-    // 显式跳转到 then_block（条件为真时执行）
-    emit_jump(then_block);
 
-    // if 分支
+    // if 分支（then）
     append_block(then_block);
     for (const auto& stmt : if_stmt.body) {
         build_from_statement(*stmt);
     }
     emit_jump(merge_block);
 
-    // else 分支
+    // else 分支（如果有）
     if (else_block) {
         append_block(else_block);
         for (const auto& stmt : if_stmt.orelse) {
@@ -1784,27 +2258,43 @@ void IRBuilder::build_if(const If& if_stmt) {
         emit_jump(merge_block);
     }
 
+    // merge_block 现在才被添加到模块，保证它在所有分支块之后
     append_block(merge_block);
 }
 
 void IRBuilder::build_while(const While& while_stmt) {
+    std::set<std::string> loop_vars = collect_loop_variables(while_stmt);
+    
     BasicBlock* loop_header = new_block("while_header");
-    BasicBlock* loop_body = new_block("while_body");
-    BasicBlock* loop_exit = new_block("while_exit");
+    // loop_exit 使用延迟添加，保证它在循环体之后
+    BasicBlock* loop_exit = new_block_delayed("while_exit");
 
-    emit_jump(loop_header);
-
-    append_block(loop_header);
-
-    if (while_stmt.test) {
-        Value condition = build_from_expression(*while_stmt.test);
-        emit_jump_if_false(condition, loop_exit);
+    std::unordered_map<std::string, Value> entry_versions;
+    for (const auto& var : loop_vars) {
+        entry_versions[var] = lookup_variable(var);
     }
 
-    emit_jump(loop_body);
+    emit_jump(loop_header);
+    append_block(loop_header);
 
+    // 记录 PHI 信息
+    std::unordered_map<std::string, Value> phi_results;
+    for (const auto& var : loop_vars) {
+        Value phi_result = module_->create_ssa_version(var);
+        phi_results[var] = phi_result;
+        update_variable(var, phi_result);
+    }
+
+    // 循环体块正常创建（在header之后）
+    BasicBlock* loop_body = new_block("while_body");
+
+    // 生成条件
+    Value condition = build_from_expression(*while_stmt.test);
+    emit_jump_if_false(condition, loop_exit);
+    current_block_->add_successor(loop_body);
+
+    // 生成循环体
     append_block(loop_body);
-
     loop_stack_.push_back({loop_header, loop_body, loop_exit, loop_exit, loop_header});
 
     for (const auto& stmt : while_stmt.body) {
@@ -1813,38 +2303,100 @@ void IRBuilder::build_while(const While& while_stmt) {
 
     loop_stack_.pop_back();
 
+    // 收集 exit 版本
+    std::unordered_map<std::string, Value> exit_versions;
+    for (const auto& var : loop_vars) {
+        exit_versions[var] = lookup_variable(var);
+    }
+
     emit_jump(loop_header);
+
+    // ========== 关键修复：按前驱块顺序创建 PHI ==========
+    // 获取 header 的前驱块（此时应该有两个：entry/跳转前块 和 loop_body）
+    const auto& preds = loop_header->predecessors();
+    BasicBlock* entry_pred = nullptr;
+    BasicBlock* body_pred = nullptr;
+    
+    // 识别哪个是入口，哪个是循环体
+    for (auto* pred : preds) {
+        if (pred == loop_body) {
+            body_pred = pred;
+        } else {
+            entry_pred = pred;  // 另一个是入口（for_exit 或之前的块）
+        }
+    }
+
+    // 保存 header 中已有的指令（条件测试等）
+    std::vector<std::unique_ptr<Instruction>> saved_instrs;
+    for (auto& instr : loop_header->instructions()) {
+        saved_instrs.push_back(std::move(instr));
+    }
+    loop_header->clear_instructions();
+    
+    // 按前驱块顺序插入 PHI：先 entry，后 body
+    for (const auto& var : loop_vars) {
+        Value phi_result = phi_results[var];
+        auto phi_instr = std::make_unique<Instruction>(IROpcode::PHI, phi_result);
+        
+        // 严格按照前驱顺序添加
+        if (entry_pred) {
+            phi_instr->add_phi_operand(entry_pred, entry_versions[var]);
+        }
+        if (body_pred) {
+            phi_instr->add_phi_operand(body_pred, exit_versions[var]);
+        }
+        
+        loop_header->append_instruction(std::move(phi_instr));
+    }
+    
+    // 恢复其他指令
+    for (auto& instr : saved_instrs) {
+        loop_header->append_instruction(std::move(instr));
+    }
 
     append_block(loop_exit);
 }
 
 void IRBuilder::build_for(const For& for_stmt) {
     Value iterable = build_from_expression(*for_stmt.iter);
-    Value iter_var = emit_get_iter(iterable);
+    emit_get_iter(iterable);
 
     BasicBlock* loop_header = new_block("for_header");
-    BasicBlock* loop_body = new_block("for_body");
-    BasicBlock* loop_exit = new_block("for_exit");
+    // loop_exit 使用延迟添加，保证它在循环体之后
+    BasicBlock* loop_exit = new_block_delayed("for_exit");
 
     emit_jump(loop_header);
-
     append_block(loop_header);
+
+    // 循环体块正常创建（在header之后）
+    BasicBlock* loop_body = new_block("for_body");
 
     loop_stack_.push_back({loop_header, loop_body, loop_exit, loop_exit, loop_header});
 
+    emit_for_iter(loop_exit);
+    current_block_->add_successor(loop_body);
+
+    append_block(loop_body);
+
     if (for_stmt.target != nullptr) {
-        Value elem = build_from_expression(*for_stmt.target);
-        emit_store_fast("i", elem);
+        const Name* name_node = static_cast<const Name*>(for_stmt.target.get());
+        std::string var_name = name_node->id;
+        Value iter_result = module_->create_ssa_version(var_name);
+        auto& scope = scope_stack_.back();
+        scope.locals_[var_name] = iter_result;
+        auto instr = std::make_unique<Instruction>(IROpcode::STORE_FAST, iter_result);
+        current_block_->append_instruction(std::move(instr));
     }
 
     for (const auto& stmt : for_stmt.body) {
         build_from_statement(*stmt);
     }
 
-    loop_stack_.pop_back();
-
     emit_jump(loop_header);
 
+    loop_stack_.pop_back();
+
+    // loop_exit 现在才被添加到模块，保证它在所有循环体块之后
     append_block(loop_exit);
 }
 
@@ -2165,6 +2717,58 @@ Value IRBuilder::build_boolop(const BoolOp& expr) {
         append_block(end_block);
     }
     return make_temporary();
+}
+
+// ============================================================================
+// SSA 辅助方法实现
+// ============================================================================
+
+Value IRBuilder::lookup_variable(const std::string& name) {
+    // 从当前作用域向外查找
+    for (auto it = scope_stack_.rbegin(); it != scope_stack_.rend(); ++it) {
+        auto local_it = it->locals_.find(name);
+        if (local_it != it->locals_.end()) {
+            return local_it->second;
+        }
+    }
+    // 未找到，返回未定义值（或全局变量）
+    if (module_->has_global(name)) {
+        return module_->get_global(name);
+    }
+    return Value::Undefined();
+}
+
+void IRBuilder::update_variable(const std::string& name, const Value& value) {
+    if (!scope_stack_.empty()) {
+        scope_stack_.back().locals_[name] = value;
+    }
+}
+
+std::set<std::string> IRBuilder::collect_loop_variables(const While& while_stmt) {
+    std::set<std::string> result;
+    
+    // 遍历循环体中的所有语句
+    for (const auto& stmt : while_stmt.body) {
+        if (stmt->type == ASTNodeType::Assign) {
+            const auto& assign = static_cast<const Assign&>(*stmt);
+            for (const auto& target : assign.targets) {
+                if (target->type == ASTNodeType::Name) {
+                    const auto& name = static_cast<const Name&>(*target);
+                    if (name.ctx == Name::Store) {
+                        result.insert(name.id);
+                    }
+                }
+            }
+        } else if (stmt->type == ASTNodeType::AugAssign) {
+            const auto& aug = static_cast<const AugAssign&>(*stmt);
+            if (aug.target->type == ASTNodeType::Name) {
+                const auto& name = static_cast<const Name&>(*aug.target);
+                result.insert(name.id);
+            }
+        }
+    }
+    
+    return result;
 }
 
 } // namespace ir

@@ -281,26 +281,69 @@ bool Optimizer::run_trivial_phi_elimination(IRModule* module) {
         auto& instructions = block->instructions();
         for (auto& instr_ptr : instructions) {
             Instruction& instr = *instr_ptr;
-            if (instr.is_phi()) {
-                const auto& operands = instr.phi_operands();
-                if (operands.size() == 1) {
-                    const auto& pair = *operands.begin();
-                    replace_uses(instr.result(), pair.second);
-                    instr_ptr.reset();
-                } else if (operands.size() == 2) {
-                    auto it = operands.begin();
-                    const Value& val1 = it->second;
-                    ++it;
-                    const Value& val2 = it->second;
+            if (!instr.is_phi()) continue;
+            
+            const auto& operands = instr.phi_operands();
+            
+            // 情况 1：只有一个操作数，可以替换
+            if (operands.size() == 1) {
+                const auto& pair = *operands.begin();
+                replace_uses(instr.result(), pair.second);
+                instr_ptr.reset();
+            }
+            // 情况 2：两个操作数
+            else if (operands.size() == 2) {
+                auto it = operands.begin();
+                const Value& val1 = it->second;
+                ++it;
+                const Value& val2 = it->second;
 
-                    if (val1.to_string() == val2.to_string()) {
-                        replace_uses(instr.result(), val1);
-                        instr_ptr.reset();
+                // 检查是否是循环变量
+                // 循环变量的两个操作数来自不同前驱（入口 vs 循环体）
+                // 即使值相同，也不能简化！
+                auto it1 = operands.begin();
+                auto it2 = it1;
+                ++it2;
+                BasicBlock* pred1 = it1->first;
+                BasicBlock* pred2 = it2->first;
+                
+                // 如果两个前驱形成回边（一个是另一个的后继），则是循环
+                bool is_loop = false;
+                for (BasicBlock* succ : pred1->successors()) {
+                    if (succ == pred2) is_loop = true;
+                }
+                for (BasicBlock* succ : pred2->successors()) {
+                    if (succ == pred1) is_loop = true;
+                }
+                
+                // 只有非循环且值完全相同时才能简化
+                if (!is_loop && val1.to_string() == val2.to_string()) {
+                    replace_uses(instr.result(), val1);
+                    instr_ptr.reset();
+                }
+                // 否则：保留 PHI 节点（循环变量的正常情况）
+            }
+            // 情况 3：多个操作数，检查是否全部相同且非循环
+            else if (operands.size() > 2) {
+                bool all_same = true;
+                auto it = operands.begin();
+                const Value& first = it->second;
+                ++it;
+                for (; it != operands.end(); ++it) {
+                    if (it->second.to_string() != first.to_string()) {
+                        all_same = false;
+                        break;
                     }
                 }
+                // 保守策略：多操作数 PHI 不简化（可能是 switch 或复杂控制流）
+                // if (all_same) {
+                //     replace_uses(instr.result(), first);
+                //     instr_ptr.reset();
+                // }
             }
         }
 
+        // 删除标记为 nullptr 的指令
         instructions.erase(
             std::remove_if(instructions.begin(), instructions.end(),
                 [](const std::unique_ptr<Instruction>& ptr) {
@@ -878,21 +921,27 @@ void DeadCodeEliminator::remove_dead_instructions(IRModule* module) {
 
             bool is_dead = false;
             
-            // 检查是否是控制流指令
-            bool is_control_flow = (instr.opcode() == IROpcode::JUMP ||
-                                   instr.opcode() == IROpcode::JUMP_IF_TRUE ||
-                                   instr.opcode() == IROpcode::JUMP_IF_FALSE ||
-                                   instr.opcode() == IROpcode::RETURN_VALUE);
-            
-            // 只删除没有结果的 LOAD_CONST 等指令
-            // 不删除 STORE_FAST 等存储指令，因为它们的操作数是临时变量是正常的
-            if (!instr.is_store() && !instr.is_call() && !is_control_flow) {
-                if (instr.has_result() && 
-                    instr.result().kind() == Value::Kind::Temporary &&
-                    instr.operand_count() == 0) {
-                    // 无操作数且结果是临时变量的指令是死代码
-                    is_dead = true;
-                }
+            // 必须保留的指令类型
+            bool must_keep = 
+                instr.is_phi() ||                                      // PHI 节点
+                instr.opcode() == IROpcode::FOR_ITER ||               // For 循环迭代
+                instr.opcode() == IROpcode::GET_ITER ||               // 获取迭代器
+                instr.opcode() == IROpcode::JUMP ||                   // 无条件跳转
+                instr.opcode() == IROpcode::JUMP_IF_TRUE ||           // 条件跳转
+                instr.opcode() == IROpcode::JUMP_IF_FALSE ||          // 条件跳转
+                instr.opcode() == IROpcode::RETURN_VALUE ||           // 返回
+                instr.opcode() == IROpcode::CALL_FUNCTION ||          // 函数调用（副作用）
+                instr.opcode() == IROpcode::CALL_METHOD ||            // 方法调用（副作用）
+                instr.opcode() == IROpcode::STORE_FAST ||             // 存储变量（副作用）
+                instr.opcode() == IROpcode::STORE_GLOBAL ||           // 存储全局（副作用）
+                instr.opcode() == IROpcode::RAISE_VARARGS;            // 抛出异常
+
+            // 只删除未使用的临时变量加载
+            if (!must_keep && 
+                instr.has_result() && 
+                instr.result().kind() == Value::Kind::Temporary) {
+                // 保守策略：暂时保留所有临时变量，避免误删
+                // 后续可以添加完整的 def-use 分析
             }
 
             if (is_dead) {
@@ -976,6 +1025,17 @@ void ControlFlowOptimizer::merge_blocks(IRModule* module) {
         if (!block) continue;
 
         if (block->instruction_count() == 0) continue;
+
+        // 禁止合并循环头块
+        bool is_loop_header = false;
+        for (const auto& instr_ptr : block->instructions()) {
+            if (instr_ptr->is_phi() || 
+                instr_ptr->opcode() == IROpcode::FOR_ITER) {
+                is_loop_header = true;
+                break;
+            }
+        }
+        if (is_loop_header) continue;
 
         Instruction* last = block->last_instruction();
         if (!last) continue;
@@ -1074,6 +1134,31 @@ void ControlFlowOptimizer::eliminate_unreachable_blocks(IRModule* module) {
         for (BasicBlock* succ : block->successors()) {
             if (!reachable.count(succ)) {
                 stack.push(succ);
+            }
+        }
+
+        // 处理 fall-through：如果当前块的最后一条指令不是跳转指令，
+        // 那么它之后的块也是可达的（通过 fall-through）
+        Instruction* last = block->last_instruction();
+        if (last) {
+            IROpcode opcode = last->opcode();
+            bool is_unconditional_jump = (opcode == IROpcode::JUMP);
+            bool is_terminator = last->is_terminator();
+
+            // 如果不是无条件跳转或终止指令，则可能 fall-through 到下一个块
+            if (!is_unconditional_jump && !is_terminator) {
+                auto& blocks = module->blocks();
+                for (size_t i = 0; i < blocks.size(); i++) {
+                    if (blocks[i].get() == block) {
+                        if (i + 1 < blocks.size()) {
+                            BasicBlock* fall_through_block = blocks[i + 1].get();
+                            if (!reachable.count(fall_through_block)) {
+                                stack.push(fall_through_block);
+                            }
+                        }
+                        break;
+                    }
+                }
             }
         }
     }
