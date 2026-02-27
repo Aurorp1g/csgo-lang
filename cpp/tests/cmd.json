@@ -1,0 +1,54 @@
+{
+  "commands": [
+    {
+      "id": 1,
+      "description": "词法分析器测试 (Tokenizer)",
+      "command": "g++ -std=c++17 -I cpp/include cpp/tests/test_tokenizer.cpp cpp/src/lexer/tokenizer.cpp -o cpp/build/test_tokenizer.exe ; if($?) { cpp/build/test_tokenizer.exe }"
+    },
+    {
+      "id": 2,
+      "description": "语法分析器测试 (Parser)",
+      "command": "g++ -std=c++17 -I cpp/include cpp/tests/test_parser.cpp cpp/src/parser/parser.cpp cpp/src/lexer/tokenizer.cpp cpp/src/ast/ast_printer.cpp -o cpp/build/test_parser.exe ; if($?) { cpp/build/test_parser.exe }"
+    },
+    {
+      "id": 3,
+      "description": "AST完整测试套件",
+      "command": "g++ -std=c++17 -I cpp/include cpp/tests/test_ast.cpp cpp/src/ast/ast_printer.cpp -o cpp/build/test_ast.exe; if ($?) { cpp/build/test_ast.exe }"
+    },
+    {
+      "id": 4,
+      "description": "符号表和类型检查测试",
+      "command": "g++ -std=c++17 -I cpp/include cpp/tests/test_semantic.cpp cpp/src/semantic/symbol_table.cpp cpp/src/semantic/type_checker.cpp cpp/src/parser/parser.cpp cpp/src/lexer/tokenizer.cpp cpp/src/ast/ast_printer.cpp -o cpp/build/test_semantic.exe; if ($?) { cpp/build/test_semantic.exe }"
+    },
+    {
+      "id": 5,
+      "description": "SSA IR 和优化器测试",
+      "command": "g++ -std=c++17 -I cpp/include cpp/tests/test_ssa_ir.cpp cpp/src/ir/ssa_ir.cpp cpp/src/ir/optimizer.cpp cpp/src/bytecode/bytecode_generator.cpp -o cpp/build/test_ssa_ir.exe; if ($?) { cpp/build/test_ssa_ir.exe }"
+    },
+    {
+      "id": 6,
+      "description": "编译 cgc",
+      "command": "g++ -std=c++17 -I cpp/include cpp/src/compiler/cgc.cpp cpp/src/parser/parser.cpp cpp/src/lexer/tokenizer.cpp cpp/src/ast/ast_printer.cpp cpp/src/semantic/symbol_table.cpp cpp/src/semantic/type_checker.cpp cpp/src/ir/ssa_ir.cpp cpp/src/ir/optimizer.cpp cpp/src/bytecode/bytecode_generator.cpp -o cpp/build/cgc.exe"
+    },
+    {
+      "id": 7,
+      "description": "编译 cgd",
+      "command": "g++ -std=c++17 -I cpp/include cpp/src/compiler/cgd.cpp cpp/src/parser/parser.cpp cpp/src/lexer/tokenizer.cpp cpp/src/ast/ast_printer.cpp cpp/src/semantic/symbol_table.cpp cpp/src/semantic/type_checker.cpp cpp/src/ir/ssa_ir.cpp cpp/src/ir/optimizer.cpp cpp/src/bytecode/bytecode_generator.cpp -o cpp/build/cgd.exe"
+    },
+    {
+      "id": 8,
+      "description": "编译器测试",
+      "command": "cpp/build/cgc.exe -v -IR -O0 -debug cpp/examples/test.cg -o cpp/examples/test.cgb"
+    },
+    {
+      "id": 9,
+      "description": "反汇编器测试",
+      "command": "cpp/build/cgd.exe cpp/examples/test.cgb"
+    },
+    {
+      "id": 10,
+      "description": "编译器和反汇编器测试",
+      "command": "cpp/build/cgc.exe -v -IR -debug cpp/examples/test.cg -o cpp/examples/test.cgb ; if($?) { cpp/build/cgd.exe cpp/examples/test.cgb }"
+    }
+  ]
+}
