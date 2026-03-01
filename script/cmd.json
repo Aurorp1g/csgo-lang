@@ -1,0 +1,44 @@
+{
+  "commands": [
+    {
+      "id": 1,
+      "description": "编译 cgc",
+      "command": "g++ -std=c++17 -I cpp/include cpp/src/compiler/cgc.cpp cpp/src/parser/parser.cpp cpp/src/lexer/tokenizer.cpp cpp/src/ast/ast_printer.cpp cpp/src/semantic/symbol_table.cpp cpp/src/semantic/type_checker.cpp cpp/src/ir/ssa_ir.cpp cpp/src/ir/optimizer.cpp cpp/src/bytecode/bytecode_generator.cpp -o cpp/build/cgc.exe"
+    },
+    {
+      "id": 2,
+      "description": "编译 cgd",
+      "command": "g++ -std=c++17 -I cpp/include cpp/src/compiler/cgd.cpp cpp/src/parser/parser.cpp cpp/src/lexer/tokenizer.cpp cpp/src/ast/ast_printer.cpp cpp/src/semantic/symbol_table.cpp cpp/src/semantic/type_checker.cpp cpp/src/ir/ssa_ir.cpp cpp/src/ir/optimizer.cpp cpp/src/bytecode/bytecode_generator.cpp -o cpp/build/cgd.exe"
+    },
+    {
+      "id": 3,
+      "description": "编译器测试",
+      "command": "cpp/build/cgc.exe -v -IR -O0 -debug examples/hello_csgo.cg -o examples/hello_csgo.cgb"
+    },
+    {
+      "id": 4,  
+      "description": "反汇编器测试",
+      "command": "cpp/build/cgd.exe examples/hello_csgo.cgb"
+    },
+    {
+      "id": 5,
+      "description": "编译器和反汇编器测试",
+      "command": "cpp/build/cgc.exe -v -IR -debug examples/hello_csgo.cg -o examples/hello_csgo.cgb ; if($?) { cpp/build/cgd.exe examples/hello_csgo.cgb }"
+    },
+    {
+      "id": 6,
+      "description": "编译 Go VM",
+      "command": "cd go;go build -o ./build/cgr.exe ./cmd/cgr.go"
+    },
+    {
+      "id": 7,
+      "description": "运行 Go VM 测试",
+      "command": "go/build/cgr.exe examples/hello_csgo.cgb"
+    },
+     {
+      "id": 8,
+      "description": "构建完整CSGO",
+      "command": "New-Item -ItemType Directory -Force dist/cg_compiler, dist/cg_vm | Out-Null; go build -o dist/csgo.exe csgo.go; if($?) { g++ -std=c++17 -I cpp/include cpp/src/compiler/cgc.cpp cpp/src/parser/parser.cpp cpp/src/lexer/tokenizer.cpp cpp/src/ast/ast_printer.cpp cpp/src/semantic/symbol_table.cpp cpp/src/semantic/type_checker.cpp cpp/src/ir/ssa_ir.cpp cpp/src/ir/optimizer.cpp cpp/src/bytecode/bytecode_generator.cpp -o dist/cg_compiler/cgc.exe }; if($?) { g++ -std=c++17 -I cpp/include cpp/src/compiler/cgd.cpp cpp/src/parser/parser.cpp cpp/src/lexer/tokenizer.cpp cpp/src/ast/ast_printer.cpp cpp/src/semantic/symbol_table.cpp cpp/src/semantic/type_checker.cpp cpp/src/ir/ssa_ir.cpp cpp/src/ir/optimizer.cpp cpp/src/bytecode/bytecode_generator.cpp -o dist/cg_compiler/cgd.exe };if($?) { cd go;go build -o ../dist/cg_vm/cgr.exe ./cmd/cgr.go }"
+    }
+  ]
+}
