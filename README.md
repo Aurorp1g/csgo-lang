@@ -1,6 +1,6 @@
 # CSGO 编程语言
 
-![GitHub](https://img.shields.io/github/license/csgo-language/csgo-language)
+![GitHub](https://img.shields.io/github/license/Aurorp1g/csgo-lang)
 ![Go](https://img.shields.io/badge/Go-1.19+-00ADD8?style=flat&logo=go)
 ![C++](https://img.shields.io/badge/C++-17+-00599C?style=flat&logo=c%2B%2B)
 
