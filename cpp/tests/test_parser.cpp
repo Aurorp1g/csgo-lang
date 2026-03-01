@@ -1,3 +1,26 @@
+/**
+ * @file test_parser.cpp
+ * @brief CSGO 编程语言语法分析器测试文件
+ *
+ * @author Aurorp1g
+ * @version 1.0
+ * @date 2026
+ *
+ * @section description 描述
+ * 本文件包含 CSGO 语言语法分析器（Parser）的单元测试。
+ * 测试递归下降解析器对各种语法结构的解析能力。
+ *
+ * @section test_cases 测试用例
+ * - 简单表达式解析
+ * - 运算符优先级
+ * - 函数定义解析
+ * - 控制流语句解析
+ * - 错误恢复机制
+ *
+ * @see Parser 语法分析器
+ * @see Tokenizer 词法分析器
+ */
+
 // cpp/tests/test_parser.cpp
 #include "parser/parser.h"
 #include <iostream>

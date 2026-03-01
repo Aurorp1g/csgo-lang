@@ -1,3 +1,26 @@
+/**
+ * @file test_tokenizer.cpp
+ * @brief CSGO 编程语言词法分析器测试文件
+ *
+ * @author Aurorp1g
+ * @version 1.0
+ * @date 2026
+ *
+ * @section description 描述
+ * 本文件包含 CSGO 语言词法分析器（Tokenizer）的单元测试。
+ * 测试词法分析器对各种 token 类型的识别能力。
+ *
+ * @section test_cases 测试用例
+ * - 关键字识别
+ * - 标识符和数字解析
+ * - 字符串解析（普通字符串、f-string）
+ * - 操作符和分隔符解析
+ * - 缩进敏感 token (Indent/Dedent)
+ *
+ * @see Tokenizer 词法分析器
+ * @see Parser 语法分析器
+ */
+
 // cpp/tests/test_tokenizer.cpp
 #include "lexer/tokenizer.h"
 #include <iostream>

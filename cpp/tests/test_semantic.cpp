@@ -1,3 +1,26 @@
+/**
+ * @file test_semantic.cpp
+ * @brief CSGO 编程语言语义分析测试文件
+ *
+ * @author Aurorp1g
+ * @version 1.0
+ * @date 2026
+ *
+ * @section description 描述
+ * 本文件包含 CSGO 语言语义分析（符号表和类型检查）的单元测试。
+ * 测试作用域管理、符号解析、类型推断等功能。
+ *
+ * @section test_cases 测试用例
+ * - 基本符号表创建
+ * - 符号定义和查找
+ * - 作用域嵌套
+ * - 类型推断
+ * - 类型兼容性检查
+ *
+ * @see SymbolTable 符号表
+ * @see TypeChecker 类型检查器
+ */
+
 #include "parser/parser.h"
 #include "semantic/symbol_table.h"
 #include "semantic/type_checker.h"

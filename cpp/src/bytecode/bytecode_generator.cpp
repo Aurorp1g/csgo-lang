@@ -2,7 +2,7 @@
  * @file bytecode_generator.cpp
  * @brief CSGO 编程语言字节码生成器实现文件
  *
- * @author CSGO Language Team
+ * @author Aurorp1g
  * @version 1.0
  * @date 2026
  *

@@ -1,3 +1,31 @@
+/**
+ * @file type_checker.cpp
+ * @brief CSGO 编程语言类型检查器实现文件
+ *
+ * @author Aurorp1g
+ * @version 1.0
+ * @date 2026
+ *
+ * @section description 描述
+ * 本文件实现了 CSGO 语言的类型检查器（Type Checker）功能。
+ * 基于 CPython 的类型注解和类型提示设计，
+ * 实现了静态类型推断和类型检查功能。
+ *
+ * @section implementation 实现细节
+ * - Type 类：类型表示和操作
+ * - TypeChecker 类：类型检查主逻辑
+ * - 类型推断算法
+ * - 类型兼容性检查
+ * - 函数调用类型检查
+ *
+ * @section reference 参考
+ * - CPython Python/typing.c: 类型检查实现
+ * - PEP 484: Type Hints
+ *
+ * @see type_checker.h 类型检查器头文件
+ * @see SymbolTable 符号表
+ */
+
 #include "semantic/type_checker.h"
 #include <sstream>
 #include <algorithm>

@@ -1,3 +1,30 @@
+/**
+ * @file parser.cpp
+ * @brief CSGO 编程语言递归下降语法分析器实现文件
+ *
+ * @author Aurorp1g
+ * @version 2.0
+ * @date 2026
+ *
+ * @section description 描述
+ * 本文件实现了 CSGO 语言的递归下降语法分析器（Parser）功能。
+ * 基于 CPython 3.8 Parser/parser.c 设计，
+ * 采用递归下降解析算法，实现完整的 Python 语法解析。
+ *
+ * @section implementation 实现细节
+ * - 表达式解析：基于运算符优先级的递归下降
+ * - 语句解析：支持简单语句和复合语句
+ * - 缩进处理：Indent/Dedent 敏感语法
+ * - 错误恢复：同步到下一个语句边界
+ *
+ * @section reference 参考
+ * - CPython Parser/parser.c: 语法分析器实现
+ * - CPython Grammar/Grammar: Python 语法定义
+ *
+ * @see parser.h 语法分析器头文件
+ * @see Tokenizer 词法分析器
+ */
+
 #include "parser/parser.h"
 #include <utility>
 #include <sstream>

@@ -2,7 +2,7 @@
  * @file optimizer.h
  * @brief CSGO 编程语言 SSA IR 优化器头文件
  *
- * @author CSGO Language Team
+ * @author Aurorp1g
  * @version 1.0
  * @date 2026
  *

@@ -1,9 +1,29 @@
 /**
  * @file cgd.cpp
- * @brief CSGO 字节码反汇编器 v2.2 (美化终端版)
+ * @brief CSGO 编程语言字节码反汇编器
  *
- * 用于查看 .cgb 字节码文件的内容
- * 特性：ANSI 颜色支持，美化输出格式
+ * @author Aurorp1g
+ * @version 2.2
+ * @date 2026
+ *
+ * @section description 描述
+ * 本文件是 CSGO 语言的字节码反汇编器（cgd - CSGO Bytecode Disassembler）。
+ * 用于查看 .cgb 字节码文件的内容，支持 ANSI 颜色输出和美化格式。
+ *
+ * @section features 功能特性
+ * - .cgb 字节码文件解析
+ * - ANSI 颜色终端输出
+ * - 美化的输出格式
+ * - 操作码和常量池显示
+ *
+ * @section usage 使用示例
+ * @code
+ * cgd input.cgb
+ * cgd input.cgb --no-color
+ * @endcode
+ *
+ * @see cgc 编译器
+ * @see BytecodeGenerator 字节码生成器
  */
 
 #include <iostream>

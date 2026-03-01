@@ -1,16 +1,33 @@
 /**
  * @file cgc.cpp
- * @brief CSGO 语言编译器主程序
+ * @brief CSGO 编程语言编译器主程序
  *
- * 将 .cg 源文件编译为 .cgb 字节码文件
+ * @author Aurorp1g
+ * @version 2.0
+ * @date 2026
  *
- * 编译流程:
+ * @section description 描述
+ * 本文件是 CSGO 语言的编译器主程序（cgc - CSGO Compiler）。
+ * 将 .cg 源文件编译为 .cgb 字节码文件。
+ *
+ * @section compilation_pipeline 编译流程
  * 1. 词法分析 (Tokenizer) - 源代码 -> Token 序列
  * 2. 语法分析 (Parser) - Token 序列 -> AST
  * 3. IR 构建 (IRBuilder) - AST -> SSA IR
  * 4. 优化 (Optimizer) - SSA IR 优化
  * 5. 字节码生成 (BytecodeGenerator) - SSA IR -> 字节码
  * 6. 序列化输出 - 字节码 -> .cgb 文件
+ *
+ * @section usage 使用示例
+ * @code
+ * cgc input.cg -o output.cgb
+ * cgc input.cg -O2 -o output.cgb
+ * @endcode
+ *
+ * @see Tokenizer 词法分析器
+ * @see Parser 语法分析器
+ * @see SSAIR SSA中间表示
+ * @see BytecodeGenerator 字节码生成器
  */
 
 #include <iostream>

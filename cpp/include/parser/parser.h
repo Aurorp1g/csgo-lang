@@ -1,3 +1,53 @@
+/**
+ * @file parser.h
+ * @brief CSGO 编程语言递归下降语法分析器头文件
+ *
+ * @author Aurorp1g
+ * @version 2.0
+ * @date 2026
+ *
+ * @section description 描述
+ * 本文件定义了 CSGO 语言的递归下降语法分析器（Parser）。
+ * 基于 CPython 3.8 Parser/parser.c 设计，
+ * 采用递归下降解析算法，实现完整的 Python 语法解析。
+ *
+ * @section features 功能特性
+ * - 递归下降解析算法
+ * - 支持完整的 Python 语法结构
+ * - 运算符优先级解析
+ * - 缩进敏感语法处理
+ * - 完整的错误报告机制
+ * - 支持 async/await 异步语法
+ * - 支持列表/字典/集合推导式
+ *
+ * @section grammar 语法规则
+ * - file_input: ENDMARKER* stmt* ENDMARKER
+ * - eval_input: testlist NEWLINE* ENDMARKER
+ * - stmt: simple_stmt | compound_stmt
+ * - simple_stmt: small_stmt (';' small_stmt)* NEWLINE
+ * - compound_stmt: if_stmt | while_stmt | for_stmt | try_stmt | with_stmt
+ *                | funcdef | classdef | decorated | async_stmt
+ *
+ * @section precedence 运算符优先级
+ * 从低到高：lambda < if-else < or < and < not < comparisons
+ *         < | < ^ < & < << >> < + - < * / // % < +x -x ~x < ** < await
+ *
+ * @section usage 使用示例
+ * @code
+ * // 从源代码字符串解析
+ * csgo::Parser parser("print('Hello, World!')");
+ * auto module = parser.parseModule();
+ *
+ * // 检查解析错误
+ * if (parser.hasError()) {
+ *     std::cerr << "Parse error: " << parser.errorMessage() << std::endl;
+ * }
+ * @endcode
+ *
+ * @see Tokenizer 词法分析器
+ * @see ASTNode AST节点定义
+ */
+
 #ifndef PARSER_H
 #define PARSER_H
 

@@ -1,3 +1,26 @@
+/**
+ * @file test_ast.cpp
+ * @brief CSGO 编程语言 AST 节点测试文件
+ *
+ * @author Aurorp1g
+ * @version 1.0
+ * @date 2026
+ *
+ * @section description 描述
+ * 本文件包含 CSGO 语言抽象语法树（AST）节点的单元测试。
+ * 测试各种 AST 节点类型的创建、序列化和遍历功能。
+ *
+ * @section test_cases 测试用例
+ * - 常量节点测试 (Constant)
+ * - 名称节点测试 (Name)
+ * - 二元运算节点测试 (BinOp)
+ * - 函数调用节点测试 (Call)
+ * - 位置信息测试
+ *
+ * @see ASTNode AST节点定义
+ * @see Parser 语法分析器
+ */
+
 // cpp/tests/test_ast.cpp
 #include "ast/ast_node.h"
 #include <iostream>

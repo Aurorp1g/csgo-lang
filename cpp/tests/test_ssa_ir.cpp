@@ -2,7 +2,7 @@
  * @file test_ssa_ir.cpp
  * @brief CSGO SSA IR 和优化器测试文件
  *
- * @author CSGO Language Team
+ * @author Aurorp1g
  * @version 1.0
  * @date 2026
  *

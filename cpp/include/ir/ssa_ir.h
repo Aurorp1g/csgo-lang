@@ -2,7 +2,7 @@
  * @file ssa_ir.h
  * @brief CSGO 编程语言 SSA 中间表示（IR）定义头文件
  *
- * @author CSGO Language Team
+ * @author Aurorp1g
  * @version 1.0
  * @date 2026
  *

@@ -1,3 +1,39 @@
+/**
+ * @file type_checker.h
+ * @brief CSGO 编程语言类型检查器头文件
+ *
+ * @author Aurorp1g
+ * @version 1.0
+ * @date 2026
+ *
+ * @section description 描述
+ * 本文件定义了 CSGO 语言的类型检查器（Type Checker）。
+ * 基于 CPython 的类型注解和类型提示设计，
+ * 实现了静态类型推断和类型检查功能。
+ *
+ * @section design 设计原则
+ * - 支持 Python 风格的类型注解
+ * - 基本类型：int, float, str, bool, None, bytes
+ * - 容器类型：list, tuple, dict, set
+ * - 泛型类型支持
+ * - 函数类型支持
+ *
+ * @section features 功能特性
+ * - 基础类型系统
+ * - 泛型容器类型（list[T], dict[K,V], tuple[T,...]）
+ * - 函数类型注解
+ * - 类型推断
+ * - 类型兼容性检查
+ *
+ * @section reference 参考
+ * - CPython Python/typing.c: 类型检查实现
+ * - PEP 484: Type Hints
+ * - PEP 526: Syntax for Variable Annotations
+ *
+ * @see SymbolTable 符号表
+ * @see SSAIR SSA中间表示
+ */
+
 #ifndef CSGO_TYPE_CHECKER_H
 #define CSGO_TYPE_CHECKER_H
 

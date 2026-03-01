@@ -1,3 +1,36 @@
+/**
+ * @file symbol_table.h
+ * @brief CSGO 编程语言符号表头文件
+ *
+ * @author Aurorp1g
+ * @version 1.0
+ * @date 2026
+ *
+ * @section description 描述
+ * 本文件定义了 CSGO 语言的符号表（Symbol Table）实现。
+ * 基于 CPython 的符号表设计，实现了完整的作用域管理功能。
+ *
+ * @section design 设计原则
+ * - 支持嵌套作用域（模块、函数、类）
+ * - 符号定义标志位管理
+ * - 自由变量和闭包支持
+ * - 名称解析优先级：局部 > 自由 > 全局 > 内置
+ *
+ * @section features 功能特性
+ * - 作用域链管理
+ * - 符号定义标志位（DEF_LOCAL, DEF_GLOBAL, DEF_PARAM 等）
+ * - 符号查找和绑定
+ * - 自由变量追踪
+ * - 嵌套作用域支持
+ *
+ * @section reference 参考
+ * - CPython Python/symtable.c: 符号表实现
+ * - CPython Include/symtable.h: 符号表头文件
+ *
+ * @see TypeChecker 类型检查器
+ * @see Parser 语法分析器
+ */
+
 #ifndef CSGO_SYMBOL_TABLE_H
 #define CSGO_SYMBOL_TABLE_H
 
