@@ -1,3 +1,24 @@
+// Package main 是 CSGO 编程语言的主入口程序
+//
+// 本程序是 CSGO 语言的统一入口（csgo），支持直接运行 .cg 源文件。
+// 自动调用编译器和虚拟机，无需手动分步执行。
+//
+// 使用方法：
+//
+//	csgo <source.cg> [args...]
+//
+// 工作流程：
+//  1. 检测输入文件类型（.cg 或 .cgb）
+//  2. 如果是 .cg 源文件，调用 cgc 编译器编译为 .cgb
+//  3. 调用 cgr 虚拟机执行编译后的字节码
+//
+// 目录结构：
+//   - dist/cg_compiler/cgc.exe: 编译器
+//   - dist/cg_vm/cgr.exe: 虚拟机
+//
+// 参考资料：
+//   - cgc: 编译器
+//   - cgr: 虚拟机
 package main
 
 import (
@@ -9,11 +30,11 @@ import (
 )
 
 const (
-	distDir          = "dist"
-	cgcDir           = "cg_compiler"
-	cgrDir           = "cg_vm"
-	compilerFileName = "cgc.exe"
-	vmFileName       = "cgr.exe"
+	distDir          = "dist"        // 发布目录
+	cgcDir           = "cg_compiler" // 编译器目录
+	cgrDir           = "cg_vm"       // 虚拟机目录
+	compilerFileName = "cgc.exe"     // 编译器文件名
+	vmFileName       = "cgr.exe"     // 虚拟机文件名
 )
 
 func main() {

@@ -1,3 +1,23 @@
+// Package gc 提供 CSGO 编程语言的垃圾回收器
+//
+// 本包实现了标记-清除（Mark and Sweep）垃圾回收算法。
+// 支持引用计数、根对象管理、内存阈值控制等功能。
+//
+// 核心类型：
+//   - Object: 可回收的对象结构
+//   - GC: 垃圾回收器主结构
+//
+// 功能特性：
+//   - 标记-清除 GC 算法
+//   - 引用计数管理
+//   - 可配置的内存阈值
+//   - 根对象管理
+//   - 终结器支持（finalizer）
+//   - 调试模式
+//
+// 设计参考：
+//   - CPython Objects/gcmodule.c: Python GC 实现
+//   - Go runtime: 垃圾回收设计
 package gc
 
 import (
@@ -8,24 +28,30 @@ import (
 	"unsafe"
 )
 
+// Object 表示可被 GC 管理的对象
+//
+// 每个对象包含 GC 所需的元数据。
 type Object struct {
-	Marked    bool
-	Finalizer func(*Object)
-	Type      int
-	Data      interface{}
-	RefCount  int32
-	Size      int
-	Next      *Object
+	Marked    bool          // GC 标记位
+	Finalizer func(*Object) // 终结器函数
+	Type      int           // 对象类型
+	Data      interface{}   // 对象数据
+	RefCount  int32         // 引用计数
+	Size      int           // 对象大小
+	Next      *Object       // 链表下一个对象
 }
 
+// GC 垃圾回收器
+//
+// 实现标记-清除算法的垃圾回收器。
 type GC struct {
-	roots      []*Object
-	objects    *Object
+	roots      []*Object // 根对象列表
+	objects    *Object   // 对象链表头
 	mu         sync.RWMutex
-	threshold  uint64
-	allocBytes uint64
-	enabled    bool
-	debug      bool
+	threshold  uint64 // 触发 GC 的内存阈值
+	allocBytes uint64 // 已分配的字节数
+	enabled    bool   // GC 是否启用
+	debug      bool   // 调试模式
 }
 
 var defaultGC *GC

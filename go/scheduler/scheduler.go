@@ -1,3 +1,23 @@
+// Package scheduler 提供 CSGO 编程语言的协程调度器
+//
+// 本包实现了轻量级协程调度器，基于 Go 的 GMP 模型设计。
+// 支持任务队列、工作池、优先级调度等功能。
+//
+// 核心类型：
+//   - Task: 协程任务结构
+//   - Scheduler: 调度器主结构
+//   - Stats: 调度统计信息
+//
+// 功能特性：
+//   - 工作池模式
+//   - 任务优先级调度
+//   - 上下文取消
+//   - 统计信息收集
+//   - 调试支持
+//
+// 设计参考：
+//   - Go runtime: GMP 调度模型
+//   - Python asyncio: 协程调度
 package scheduler
 
 import (
@@ -9,29 +29,37 @@ import (
 	"time"
 )
 
+// Task 表示一个协程任务
+//
+// 包含任务的元数据、状态和执行结果。
 type Task struct {
-	ID       int64
-	Fn       func() interface{}
-	Result   interface{}
-	Error    error
-	Done     chan struct{}
-	State    TaskState
-	Priority int
-	Created  time.Time
-	Started  time.Time
-	Ended    time.Time
+	ID       int64              // 任务唯一标识
+	Fn       func() interface{} // 任务执行函数
+	Result   interface{}        // 任务执行结果
+	Error    error              // 任务执行错误
+	Done     chan struct{}      // 任务完成信号
+	State    TaskState          // 任务状态
+	Priority int                // 任务优先级
+	Created  time.Time          // 创建时间
+	Started  time.Time          // 开始时间
+	Ended    time.Time          // 结束时间
 }
 
+// TaskState 表示任务状态
 type TaskState int
 
+// 任务状态常量
 const (
-	TaskReady TaskState = iota
-	TaskRunning
-	TaskCompleted
-	TaskFailed
-	TaskCancelled
+	TaskReady     TaskState = iota // 任务就绪
+	TaskRunning                    // 任务运行中
+	TaskCompleted                  // 任务完成
+	TaskFailed                     // 任务失败
+	TaskCancelled                  // 任务取消
 )
 
+// Scheduler 协程调度器
+//
+// 基于工作池模式的轻量级调度器。
 type Scheduler struct {
 	workers   int
 	tasks     chan *Task
@@ -47,13 +75,16 @@ type Scheduler struct {
 	debug     bool
 }
 
+// Stats 调度统计信息
+//
+// 收集调度器运行时的各种统计信息。
 type Stats struct {
-	TasksCreated   int64
-	TasksRan       int64
-	TasksSucceeded int64
-	TasksFailed    int64
-	WorkersActive  int64
-	QueueDepth     int64
+	TasksCreated   int64 // 创建的任务总数
+	TasksRan       int64 // 已运行的任务数
+	TasksSucceeded int64 // 成功完成的任务数
+	TasksFailed    int64 // 失败的任务数
+	WorkersActive  int64 // 当前活跃的工作协程数
+	QueueDepth     int64 // 任务队列深度
 }
 
 func New(workers int) *Scheduler {

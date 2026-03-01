@@ -1,3 +1,6 @@
+// Package vm 提供 CSGO 编程语言的虚拟机实现
+//
+// 本包实现了 CSGO 语言的字节码解释器
 package vm
 
 import (
@@ -13,23 +16,32 @@ const (
 	MagicNumber = "CGO\x01"
 )
 
+// ObjectType 表示 CSGO 语言的对象类型
 type ObjectType int
 
+// 对象类型常量定义
 const (
-	TypeNone ObjectType = iota
-	TypeBool
-	TypeInt
-	TypeFloat
-	TypeString
-	TypeList
-	TypeDict
-	TypeFunction
-	TypeBuiltin
-	TypeTuple
-	TypeRange
-	TypeCell
+	TypeNone     ObjectType = iota // 空值类型
+	TypeBool                       // = 1
+	TypeInt                        // = 2
+	TypeFloat                      // = 3
+	TypeString                     // = 4
+	TypeList                       // = 5
+	TypeDict                       // = 6
+	TypeFunction                   // = 7
+	TypeBuiltin                    // = 8
+	TypeTuple                      // = 9
+	TypeRange                      // = 10
+	TypeCell                       // = 11
 )
 
+// Object 表示 CSGO 语言的运行时对象
+//
+// 每个对象包含：
+//   - Type: 对象类型
+//   - Value: 对象值（实际数据）
+//   - RefCount: 引用计数（用于 GC）
+//   - Marked: GC 标记位
 type Object struct {
 	Type     ObjectType
 	Value    interface{}

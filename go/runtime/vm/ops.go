@@ -1,3 +1,6 @@
+// Package vm 提供 CSGO 编程语言的虚拟机实现
+//
+// 本包实现了 CSGO 语言的字节码操作实现
 package vm
 
 import (
@@ -7,6 +10,13 @@ import (
 	"strings"
 )
 
+// isTruthy 判断对象是否为真值
+//
+// 用于条件判断和逻辑运算。根据对象类型判断真值：
+//   - None: 返回 false
+//   - Bool: 返回布尔值本身
+//   - Int/Float: 非零为 true
+//   - String/List/Dict/Tuple: 非空为 true
 func isTruthy(obj *Object) bool {
 	switch obj.Type {
 	case TypeNone:
